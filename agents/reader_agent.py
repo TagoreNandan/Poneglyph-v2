@@ -1,32 +1,51 @@
-import requests
-from bs4 import BeautifulSoup
+from openai import OpenAI
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+)
 
 
-def extract_article_text(url: str, max_chars: int = 5000):
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0"
-        }
+def summarize_source(source):
 
-        response = requests.get(
-            url,
-            headers=headers,
-            timeout=10
-        )
+    content = source.get(
+        "raw_content",
+        source.get("content", "")
+    )
 
-        soup = BeautifulSoup(
-            response.text,
-            "html.parser"
-        )
+    prompt = f"""
+You are a research analyst.
 
-        paragraphs = soup.find_all("p")
+Read the source below and create:
 
-        text = " ".join(
-            p.get_text(strip=True)
-            for p in paragraphs
-        )
+1. Short Summary
+2. Key Findings (bullet points)
 
-        return text[:max_chars]
+SOURCE:
 
-    except Exception as e:
-        return f"Error reading {url}: {str(e)}"
+Title: {source['title']}
+
+Content:
+{content[:3000]}
+"""
+
+    response = client.chat.completions.create(
+        model="openrouter/auto",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        max_tokens=500
+    )
+
+    return {
+        "title": source["title"],
+        "url": source["url"],
+        "summary": response.choices[0].message.content
+    }
