@@ -10,9 +10,10 @@ client = TavilyClient(
 
 def search_web(query: str):
     response = client.search(
-        query=query,
-        search_depth="basic",
-        max_results=5
-    )
+    query=query,
+    search_depth="advanced",
+    max_results=5,
+    include_raw_content=True
+)
 
     return response["results"]

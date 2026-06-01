@@ -1,9 +1,10 @@
-from agents.search_agent import search_web
+from graph import graph
 
-results = search_web(
-    "Latest developments in Retrieval-Augmented Generation"
+result = graph.invoke(
+    {
+        "query": "Latest developments in Retrieval-Augmented Generation"
+    }
 )
 
-for i, result in enumerate(results, 1):
-    print(f"\n{i}. {result['title']}")
-    print(result['url'])
+print("\n=== REPORT ===\n")
+print(result["report"])
