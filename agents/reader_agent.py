@@ -44,8 +44,13 @@ Content:
         max_tokens=500
     )
 
+    summary = response.choices[0].message.content
+    
+    if summary is None:
+        summary = "No summary available."
+    
     return {
         "title": source["title"],
         "url": source["url"],
-        "summary": response.choices[0].message.content
+        "content": summary
     }

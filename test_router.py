@@ -1,15 +1,16 @@
+# test_router.py
+
 from agents.router_agent import classify_query
 
 queries = [
-    "Latest AI news",
     "What is LangGraph?",
-    "Compare LangGraph with latest AI agent frameworks"
+    "Latest AI news",
+    "Compare LangGraph with latest AI agent frameworks",
+    "Difference between LangGraph and current agent frameworks"
 ]
 
 for query in queries:
 
-    route = classify_query(query)
-
     print()
     print(query)
-    print("→", route)
+    print("→", classify_query(query))

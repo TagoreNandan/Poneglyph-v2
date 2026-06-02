@@ -16,10 +16,12 @@ def generate_research_summary(query, search_results):
 
     for idx, result in enumerate(search_results[:3], start=1):
 
-        content = result.get(
-            "raw_content",
-            result.get("content", "")
-        )
+        content = (
+    result.get("raw_content")
+    or result.get("content")
+    or result.get("summary")
+    or ""
+)
 
         formatted_results += f"""
 =========================
@@ -33,7 +35,7 @@ URL:
 {result['url']}
 
 CONTENT:
-{content[:3000]}
+{str(content)[:3000]}
 
 """
 

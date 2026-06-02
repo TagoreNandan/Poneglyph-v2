@@ -1,57 +1,46 @@
-from openai import OpenAI
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
-
-
 def classify_query(query):
 
-    prompt = f"""
-Classify the query into ONE category.
+    query = query.lower()
 
-Categories:
+    rag_keywords = [
+        "langgraph",
+        "chromadb",
+        "rag",
+        "retrieval augmented generation"
+    ]
 
-WEB
-- Current events
-- Latest news
-- Recent developments
-- Trending topics
+    hybrid_keywords = [
+        "compare",
+        "comparison",
+        "vs",
+        "versus",
+        "difference"
+    ]
 
-RAG
-- Questions about stored documents
-- Internal knowledge
-- Existing knowledge base
+    web_keywords = [
+        "latest",
+        "today",
+        "recent",
+        "current",
+        "news",
+        "2025",
+        "2026",
+        "trend",
+        "trends"
+    ]
 
-HYBRID
-- Needs both web search and stored knowledge
+    # HYBRID
 
-Return ONLY:
+    for keyword in hybrid_keywords:
+        if keyword in query:
+            return "HYBRID"
 
-WEB
-or
-RAG
-or
-HYBRID
+    # RAG
 
-Query:
-{query}
-"""
+    for keyword in rag_keywords:
+        if keyword in query:
+            return "RAG"
 
-    response = client.chat.completions.create(
-        model="openrouter/auto",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        max_tokens=10
-    )
+    # Everything else → WEB
 
-    return response.choices[0].message.content.strip()
+    return "WEB"
