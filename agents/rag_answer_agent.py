@@ -10,37 +10,28 @@ client = OpenAI(
 )
 
 
-def classify_query(query):
+def generate_rag_answer(
+    query,
+    retrieved_chunks
+):
+
+    context = "\n\n".join(
+        retrieved_chunks
+    )
 
     prompt = f"""
-Classify the query into ONE category.
+Answer the user's question using ONLY the provided context.
 
-Categories:
+If the answer is not present in the context,
+say:
 
-WEB
-- Current events
-- Latest news
-- Recent developments
-- Trending topics
+"I could not find this information in the local knowledge base."
 
-RAG
-- Questions about stored documents
-- Internal knowledge
-- Existing knowledge base
-
-HYBRID
-- Needs both web search and stored knowledge
-
-Return ONLY:
-
-WEB
-or
-RAG
-or
-HYBRID
-
-Query:
+QUESTION:
 {query}
+
+CONTEXT:
+{context}
 """
 
     response = client.chat.completions.create(
@@ -51,7 +42,12 @@ Query:
                 "content": prompt
             }
         ],
-        max_tokens=10
+        max_tokens=500
     )
 
-    return response.choices[0].message.content.strip()
+    return (
+        response
+        .choices[0]
+        .message
+        .content
+    )

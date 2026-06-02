@@ -1,0 +1,9 @@
+Retrieval-Augmented Generation combines retrieval systems with large language models.
+
+LangGraph is a framework used for building stateful multi-agent workflows.
+
+ChromaDB is a vector database designed for semantic search.
+
+Embeddings convert text into numerical vectors.
+
+Multi-agent systems use specialized agents that collaborate on complex tasks.
