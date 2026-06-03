@@ -7,6 +7,7 @@ from agents.reader_agent import summarize_source
 from agents.research_agent import generate_research_summary
 from agents.writer_agent import format_report
 from agents.critic_agent import review_report
+from memory.database import save_research
 
 from agents.router_agent import classify_query
 
@@ -135,12 +136,21 @@ def research_node(state: ResearchState):
 
 def writer_node(state: ResearchState):
 
-    print("WRITER NODE EXECUTED")
+    report_to_format = (
+        state.get("critic_report")
+        or state["report"]
+    )
 
     formatted_report = format_report(
-        report=state["critic_report"],
+        report=report_to_format,
         query=state["query"],
         sources=state["sources"]
+    )
+
+    save_research(
+        query=state["query"],
+        route=state["route"],
+        report=formatted_report
     )
 
     return {
@@ -175,6 +185,12 @@ def rag_writer_node(state: ResearchState):
         report=state["rag_answer"],
         query=state["query"],
         sources=[]
+    )
+
+    save_research(
+        query=state["query"],
+        route="RAG",
+        report=formatted_report
     )
 
     return {

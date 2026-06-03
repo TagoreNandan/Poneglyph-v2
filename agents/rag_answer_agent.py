@@ -1,13 +1,4 @@
-from openai import OpenAI
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
+import ollama
 
 
 def generate_rag_answer(
@@ -34,20 +25,25 @@ CONTEXT:
 {context}
 """
 
-    response = client.chat.completions.create(
-        model="openrouter/auto",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        max_tokens=500
-    )
+    try:
 
-    return (
-        response
-        .choices[0]
-        .message
-        .content
-    )
+        response = ollama.chat(
+            model="mistral:7b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        return response["message"]["content"]
+
+    except Exception as e:
+
+        return f"""
+I could not generate an answer.
+
+Error:
+{str(e)}
+"""

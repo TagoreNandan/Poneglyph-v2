@@ -2,11 +2,17 @@ def classify_query(query):
 
     query = query.lower()
 
-    rag_keywords = [
-        "langgraph",
-        "chromadb",
-        "rag",
-        "retrieval augmented generation"
+    web_keywords = [
+        "latest",
+        "today",
+        "recent",
+        "current",
+        "news",
+        "2025",
+        "2026",
+        "trend",
+        "trends",
+        "developments"
     ]
 
     hybrid_keywords = [
@@ -17,30 +23,29 @@ def classify_query(query):
         "difference"
     ]
 
-    web_keywords = [
-        "latest",
-        "today",
-        "recent",
-        "current",
-        "news",
-        "2025",
-        "2026",
-        "trend",
-        "trends"
+    rag_keywords = [
+        "langgraph",
+        "chromadb",
+        "rag",
+        "retrieval augmented generation"
     ]
 
-    # HYBRID
+    # HYBRID first
 
     for keyword in hybrid_keywords:
         if keyword in query:
             return "HYBRID"
 
-    # RAG
+    # WEB second
+
+    for keyword in web_keywords:
+        if keyword in query:
+            return "WEB"
+
+    # RAG third
 
     for keyword in rag_keywords:
         if keyword in query:
             return "RAG"
-
-    # Everything else → WEB
 
     return "WEB"

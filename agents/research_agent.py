@@ -1,27 +1,24 @@
-import os
-from openai import OpenAI
-from dotenv import load_dotenv
-
-load_dotenv()
-
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
+import ollama
 
 
-def generate_research_summary(query, search_results):
+def generate_research_summary(
+    query,
+    search_results
+):
 
     formatted_results = ""
 
-    for idx, result in enumerate(search_results[:3], start=1):
+    for idx, result in enumerate(
+        search_results[:3],
+        start=1
+    ):
 
         content = (
-    result.get("raw_content")
-    or result.get("content")
-    or result.get("summary")
-    or ""
-)
+            result.get("raw_content")
+            or result.get("content")
+            or result.get("summary")
+            or ""
+        )
 
         formatted_results += f"""
 =========================
@@ -35,8 +32,7 @@ URL:
 {result['url']}
 
 CONTENT:
-{str(content)[:3000]}
-
+{str(content)[:1000]}
 """
 
     prompt = f"""
@@ -60,17 +56,31 @@ Analyze all sources together and generate:
 Base your report on evidence from the sources.
 
 Mention when multiple sources agree on a finding.
+
+Format the output in clean markdown.
 """
 
-    response = client.chat.completions.create(
-        model="google/gemini-3.1-flash-lite",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        max_tokens=1000
-    )
+    try:
 
-    return response.choices[0].message.content
+        response = ollama.chat(
+            model="mistral:7b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        return response["message"]["content"]
+
+    except Exception as e:
+
+        return f"""
+# Error
+
+Research generation failed.
+
+Details:
+{str(e)}
+"""

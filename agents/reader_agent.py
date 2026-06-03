@@ -1,13 +1,4 @@
-from openai import OpenAI
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
+import ollama
 
 
 def summarize_source(source):
@@ -30,25 +21,30 @@ SOURCE:
 Title: {source['title']}
 
 Content:
-{content[:3000]}
+{content[:1000]}
 """
 
-    response = client.chat.completions.create(
-        model="openrouter/auto",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        max_tokens=500
-    )
+    try:
 
-    summary = response.choices[0].message.content
-    
-    if summary is None:
-        summary = "No summary available."
-    
+        response = ollama.chat(
+            model="mistral:7b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        summary = response["message"]["content"]
+
+        if not summary:
+            summary = "No summary available."
+
+    except Exception as e:
+
+        summary = f"Failed to summarize source: {str(e)}"
+
     return {
         "title": source["title"],
         "url": source["url"],

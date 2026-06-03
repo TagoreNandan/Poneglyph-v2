@@ -1,13 +1,4 @@
-import os
-from openai import OpenAI
-from dotenv import load_dotenv
-
-load_dotenv()
-
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
+import ollama
 
 
 def review_report(
@@ -43,20 +34,24 @@ Do not explain your review process.
 Return only the improved report.
 """
 
-    response = client.chat.completions.create(
-        model="google/gemini-3.1-flash-lite",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        max_tokens=1500
-    )
+    try:
 
-    return (
-        response
-        .choices[0]
-        .message
-        .content
-    )
+        response = ollama.chat(
+            model="mistral:7b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        return response["message"]["content"]
+
+    except Exception as e:
+
+        print(
+            f"Critic Agent Error: {e}"
+        )
+
+        return report
