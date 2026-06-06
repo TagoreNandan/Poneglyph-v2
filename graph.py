@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import TypedDict, Dict, Any
 
 from langgraph.graph import StateGraph, END
 
@@ -14,10 +14,8 @@ from agents.router_agent import classify_query
 from rag.retriever import retrieve
 from agents.rag_answer_agent import generate_rag_answer
 
-
 class ResearchState(TypedDict):
     query: str
-
     route: str
 
     search_results: list
@@ -27,12 +25,14 @@ class ResearchState(TypedDict):
     rag_answer: str
 
     report: str
-    critic_report: str
+
+    critic_report: dict
 
     formatted_report: str
 
-    sources: list
+    insights: Dict[str, Any]
 
+    sources: list
 
 # -------------------------
 # ROUTER
@@ -73,20 +73,42 @@ def critic_node(state: ResearchState):
 
     print("CRITIC NODE EXECUTED")
 
-    improved_report = review_report(
+    critic_result = review_report(
         query=state["query"],
         report=state["report"]
     )
 
     return {
-        "critic_report": improved_report
+    "critic_report": critic_result,
+
+    "insights": {
+        "confidence_score":
+            critic_result["confidence_score"],
+
+        "source_quality":
+            critic_result["source_quality"],
+
+        "source_agreement":
+            critic_result["source_agreement"],
+
+        "coverage_score":
+            critic_result["coverage_score"],
+
+        "research_gaps":
+            critic_result["research_gaps"],
+
+        "contradictions":
+            critic_result["contradictions"]
     }
+}
+
 
 # -------------------------
 # WEB FLOW
 # -------------------------
 
 def search_node(state: ResearchState):
+    print("SEARCH NODE EXECUTED")
 
     results = search_web(
         state["query"]
@@ -136,10 +158,24 @@ def research_node(state: ResearchState):
 
 def writer_node(state: ResearchState):
 
-    report_to_format = (
-        state.get("critic_report")
-        or state["report"]
-    )
+    print(type(state.get("critic_report")))
+    print(state.get("critic_report"))
+
+    critic_data = state.get("critic_report")
+
+    print("\nCRITIC DATA:\n")
+    print(critic_data)
+    print(type(critic_data))
+
+    report_to_format = state["report"]
+    
+    report_to_format = state["report"]
+
+    print(type(report_to_format))
+    
+    if isinstance(report_to_format, str):
+        print(report_to_format[:500])
+
 
     formatted_report = format_report(
         report=report_to_format,
@@ -154,9 +190,9 @@ def writer_node(state: ResearchState):
     )
 
     return {
-        "formatted_report": formatted_report
-    }
-
+    "formatted_report": formatted_report,
+    "insights": state.get("insights", {})
+}
 
 # -------------------------
 # RAG FLOW
@@ -324,11 +360,6 @@ builder.add_edge(
 builder.add_edge(
     "reader",
     "research"
-)
-
-builder.add_edge(
-    "writer",
-    END
 )
 
 # RAG PATH

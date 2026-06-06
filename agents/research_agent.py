@@ -1,4 +1,4 @@
-import ollama
+from llm.groq_client import generate
 
 
 def generate_research_summary(
@@ -32,47 +32,83 @@ URL:
 {result['url']}
 
 CONTENT:
-{str(content)[:1000]}
+{str(content)[:4000]}
 """
 
     prompt = f"""
-You are an expert research analyst.
+You are a senior research analyst.
 
 Research Topic:
 {query}
 
-Below are multiple sources collected from the web.
+Sources:
 
 {formatted_results}
 
-Analyze all sources together and generate:
+You are a senior industry analyst.
 
-1. Executive Summary
-2. Key Findings
-3. Emerging Trends
-4. Conflicting Opinions (if any)
-5. Recommended Reading
+Do not summarize sources individually.
 
-Base your report on evidence from the sources.
+Instead:
 
-Mention when multiple sources agree on a finding.
+- Synthesize information across all sources
+- Compare viewpoints
+- Explain why findings matter
+- Identify patterns
+- Identify implications
+- Draw conclusions from evidence
+- Avoid repeating source text
+- Provide expert analysis
 
-Format the output in clean markdown.
+Every section should contain reasoning,
+not just facts.
+
+Focus on insight generation,
+not summarization.
+
+Requirements:
+
+- Target length: 600-800 words
+- Use information from all available sources
+- Mention when sources agree
+- Mention disagreements when they exist
+- Avoid repeating information
+- Use concise analytical writing
+- Support findings with evidence from sources
+- Use bullet points where appropriate
+
+Structure:
+
+# Executive Summary
+
+Brief overview of the topic and major conclusions.
+
+# Key Findings
+
+Summarize the most important findings from the sources.
+
+# Emerging Trends
+
+Identify patterns, innovations, and future developments.
+
+# Conflicting Opinions
+
+Mention disagreements or write "No significant conflicts found."
+
+# Recommendations
+
+Suggest next steps, practical implications, or areas for further research.
+
+# Conclusion
+
+Provide a concise closing summary.
+
+Return valid markdown only.
 """
 
     try:
 
-        response = ollama.chat(
-            model="mistral:7b",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        )
-
-        return response["message"]["content"]
+        return generate(prompt)
 
     except Exception as e:
 

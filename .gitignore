@@ -13,3 +13,9 @@ reports/
 
 # macOS
 .DS_Store
+
+
+memory/research.db
+data/chroma_db/
+
+debug_state.txt

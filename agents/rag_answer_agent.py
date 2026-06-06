@@ -1,4 +1,4 @@
-import ollama
+from llm.groq_client import generate
 
 
 def generate_rag_answer(
@@ -27,17 +27,7 @@ CONTEXT:
 
     try:
 
-        response = ollama.chat(
-            model="mistral:7b",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        )
-
-        return response["message"]["content"]
+        return generate(prompt)
 
     except Exception as e:
 

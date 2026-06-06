@@ -1,12 +1,13 @@
-import ollama
+from llm.groq_client import generate
 
 
 def summarize_source(source):
 
-    content = source.get(
-        "raw_content",
-        source.get("content", "")
-    )
+    content = (
+    source.get("raw_content")
+    or source.get("content")
+    or ""
+)
 
     prompt = f"""
 You are a research analyst.
@@ -26,17 +27,7 @@ Content:
 
     try:
 
-        response = ollama.chat(
-            model="mistral:7b",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        )
-
-        summary = response["message"]["content"]
+        summary = generate(prompt)
 
         if not summary:
             summary = "No summary available."
