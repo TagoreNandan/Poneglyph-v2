@@ -17,4 +17,14 @@ def retrieve(query, k=3):
         n_results=k
     )
 
-    return results["documents"][0]
+    documents = results["documents"][0]
+    distances = results["distances"][0]
+    
+    filtered = []
+    for doc, dist in zip(documents, distances):
+        # relevance score: 1.0 - (dist / 2.0)
+        relevance = 1.0 - (dist / 2.0)
+        if relevance >= 0.45:
+            filtered.append(doc)
+            
+    return filtered

@@ -12,17 +12,12 @@ export const fetchReport = async (id) => {
   return res.data;
 };
 
-export const generateResearch = async (query) => {
-  const res = await axios.post(`${API_BASE}/research`, { query });
+export const generateResearch = async (query, bypass_ambiguity = false) => {
+  const res = await axios.post(`${API_BASE}/research`, { query, bypass_ambiguity });
   return res.data;
 };
 
-export const continueResearch = async (original_report, deeper_query) => {
-  const res = await axios.post(`${API_BASE}/research/continue`, {
-    original_report, deeper_query
-  });
-  return res.data;
-};
+
 
 export const sendChat = async (report, question, history) => {
   const res = await axios.post(`${API_BASE}/chat`, {
@@ -31,8 +26,8 @@ export const sendChat = async (report, question, history) => {
   return res.data;
 };
 
-export const downloadPDF = async (report, insights) => {
-  const res = await axios.post(`${API_BASE}/pdf`, { report, insights }, { responseType: 'blob' });
+export const downloadPDF = async (report, insights, chatHistory) => {
+  const res = await axios.post(`${API_BASE}/pdf`, { report, insights, chat_history: chatHistory }, { responseType: 'blob' });
   const url = window.URL.createObjectURL(new Blob([res.data]));
   const link = document.createElement('a');
   link.href = url;

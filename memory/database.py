@@ -3,6 +3,8 @@ import sqlite3
 DB_NAME = "memory/research.db"
 
 
+import json
+
 def init_db():
 
     conn = sqlite3.connect(
@@ -22,6 +24,14 @@ def init_db():
         )
         """
     )
+    
+    # Run column migrations
+    cursor.execute("PRAGMA table_info(research_history)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if "sources" not in columns:
+        cursor.execute("ALTER TABLE research_history ADD COLUMN sources TEXT")
+    if "insights" not in columns:
+        cursor.execute("ALTER TABLE research_history ADD COLUMN insights TEXT")
 
     conn.commit()
     conn.close()
@@ -29,7 +39,9 @@ def init_db():
 def save_research(
     query,
     route,
-    report
+    report,
+    sources=None,
+    insights=None
 ):
 
     conn = sqlite3.connect(
@@ -38,20 +50,27 @@ def save_research(
 
     cursor = conn.cursor()
 
+    sources_json = json.dumps(sources or [])
+    insights_json = json.dumps(insights or {})
+
     cursor.execute(
         """
         INSERT INTO research_history
         (
             query,
             route,
-            report
+            report,
+            sources,
+            insights
         )
-        VALUES (?, ?, ?)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             query,
             route,
-            report
+            report,
+            sources_json,
+            insights_json
         )
     )
 
@@ -101,7 +120,9 @@ def get_report_by_id(report_id):
             query,
             route,
             report,
-            timestamp
+            timestamp,
+            sources,
+            insights
         FROM research_history
         WHERE id = ?
         """,
