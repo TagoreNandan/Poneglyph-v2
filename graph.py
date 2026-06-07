@@ -374,11 +374,9 @@ def critic_node(state: ResearchState):
         return {
             "critic_report": {
                 "improved_report": report,
-                "research_gaps": [],
                 "contradictions": []
             },
             "insights": {
-                "research_gaps": [],
                 "contradictions": []
             }
         }
@@ -393,7 +391,6 @@ def critic_node(state: ResearchState):
     return {
         "critic_report": critic_result,
         "insights": {
-            "research_gaps": critic_result.get("research_gaps", []),
             "contradictions": critic_result.get("contradictions", [])
         },
         "activity_log": log

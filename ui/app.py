@@ -98,40 +98,28 @@ def generate_pdf(text, insights):
     
     content.append(
         Paragraph(
-            f"Confidence Score: {int(insights.get('confidence_score', 0) * 100)}%",
-            styles["BodyText"]
+            "Research Quality Indicators",
+            styles["Heading1"]
         )
     )
     
-    content.append(
-        Paragraph(
-            f"Source Quality: {int(insights.get('source_quality', 0) * 100)}%",
-            styles["BodyText"]
-        )
-    )
+    ref_used = insights.get("references_used", insights.get("reference_count", "N/A"))
+    uniq_src = insights.get("unique_sources", "N/A")
+    freshness = insights.get("average_source_freshness", "N/A")
     
-    content.append(
-        Paragraph(
-            f"Coverage: {int(insights.get('coverage_score', 0) * 100)}%",
-            styles["BodyText"]
-        )
-    )
+    citation_density = insights.get("citation_density", "N/A")
+    evidence_coverage = insights.get("evidence_coverage", "N/A")
     
-    content.append(
-        Paragraph(
-            "Research Gaps",
-            styles["Heading2"]
-        )
-    )
+    density_str = f"{int(citation_density * 100)}%" if isinstance(citation_density, (int, float)) else "N/A"
+    coverage_str = f"{int(evidence_coverage * 100)}%" if isinstance(evidence_coverage, (int, float)) else "N/A"
+
+    content.append(Paragraph(f"References Used: {ref_used}", styles["BodyText"]))
+    content.append(Paragraph(f"Unique Sources: {uniq_src}", styles["BodyText"]))
+    content.append(Paragraph(f"Average Source Freshness: {freshness}", styles["BodyText"]))
+    content.append(Paragraph(f"Citation Density: {density_str}", styles["BodyText"]))
+    content.append(Paragraph(f"Evidence Coverage: {coverage_str}", styles["BodyText"]))
     
-    for gap in insights.get("research_gaps", []):
-        content.append(
-            Paragraph(
-                f"• {gap}",
-                styles["BodyText"]
-            )
-        )
-        
+
     content.append(
         Paragraph(
             "Contradictions",
@@ -481,40 +469,51 @@ else:
         duration = st.session_state.get("latest_time", 0)
         
         # 1. Display Insights if they exist and contain data
-        if "confidence_score" in insights:
-            st.markdown("<h3>Research Insights</h3>", unsafe_allow_html=True)
+        if "references_used" in insights or "word_count" in insights:
+            st.markdown("<h3>Research Quality Indicators</h3>", unsafe_allow_html=True)
             
-            c1_pct = int(insights.get("confidence_score", 0) * 100)
-            c2_pct = int(insights.get("source_quality", 0) * 100)
-            c3_pct = int(insights.get("coverage_score", 0) * 100)
+            ref_used = insights.get("references_used", insights.get("reference_count", 0))
+            uniq_src = insights.get("unique_sources", 0)
+            freshness = insights.get("average_source_freshness", "N/A")
+            density_pct = insights.get("citation_density", 0)
+            coverage_pct = insights.get("evidence_coverage", 0)
+            
+            density_val = f"{int(density_pct * 100)}%" if isinstance(density_pct, (int, float)) else "N/A"
+            coverage_val = f"{int(coverage_pct * 100)}%" if isinstance(coverage_pct, (int, float)) else "N/A"
             
             metric_html = f"""
             <div class="metrics-grid">
-                {render_metric_card("Confidence", c1_pct, "#6366F1", "#8B5CF6")}
-                {render_metric_card("Source Quality", c2_pct, "#8B5CF6", "#06B6D4")}
-                {render_metric_card("Coverage", c3_pct, "#06B6D4", "#3B82F6")}
+                <div class="metric-card">
+                    <div class="metric-title">References Used</div>
+                    <div class="metric-value">{ref_used}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Unique Sources</div>
+                    <div class="metric-value">{uniq_src}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Avg Source Freshness</div>
+                    <div class="metric-value">{freshness}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Citation Density</div>
+                    <div class="metric-value">{density_val}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Evidence Coverage</div>
+                    <div class="metric-value">{coverage_val}</div>
+                </div>
             </div>
             """
             st.markdown(metric_html, unsafe_allow_html=True)
             
-            col_gap, col_contra = st.columns(2)
-            with col_gap:
-                with st.expander("Research Gaps", expanded=True):
-                    gaps = insights.get("research_gaps", [])
-                    if gaps:
-                        for gap in gaps:
-                            st.markdown(render_gap_alert(gap), unsafe_allow_html=True)
-                    else:
-                        st.markdown(render_gap_alert("No major gaps identified."), unsafe_allow_html=True)
-                        
-            with col_contra:
-                with st.expander("Contradictions", expanded=False):
-                    contradictions = insights.get("contradictions", [])
-                    if contradictions:
-                        for item in contradictions:
-                            st.markdown(render_contradiction_alert(item), unsafe_allow_html=True)
-                    else:
-                        st.markdown(render_contradiction_alert("No contradictions found."), unsafe_allow_html=True)
+            with st.expander("Contradictions", expanded=False):
+                contradictions = insights.get("contradictions", [])
+                if contradictions:
+                    for item in contradictions:
+                        st.markdown(render_contradiction_alert(item), unsafe_allow_html=True)
+                else:
+                    st.markdown(render_contradiction_alert("No contradictions found."), unsafe_allow_html=True)
             
             st.markdown("<hr/>", unsafe_allow_html=True)
             
@@ -591,24 +590,3 @@ else:
                 st.rerun()
                 
         st.markdown("<hr/>", unsafe_allow_html=True)
-        
-        # 6. Continue Research
-        st.markdown("<h3>Continue Research</h3>", unsafe_allow_html=True)
-        deeper_query = st.text_input("Explore a specific aspect in more detail...", key="continue_research_input")
-        if st.button("Continue Research", key="btn_continue_research"):
-            if deeper_query.strip():
-                enhanced_query = f"""
-Original Report:
-
-{latest_report[:3000]}
-
-Further Research Request:
-
-{deeper_query}
-"""
-                with st.spinner("Expanding research..."):
-                    result = graph.invoke({"query": enhanced_query})
-                    
-                st.session_state["latest_report"] = result["formatted_report"]
-                st.session_state["insights"] = result.get("insights", "")
-                st.rerun()

@@ -1,5 +1,6 @@
 import ollama
 import json
+from llm.gemini_client import generate
 
 
 def review_report(
@@ -23,19 +24,6 @@ JSON format:
 {{
     "improved_report": "...",
 
-    "confidence_score": 0,
-
-    "source_quality": 0,
-
-    "source_agreement": 0,
-
-    "coverage_score": 0,
-
-    "research_gaps": [
-        "...",
-        "..."
-    ],
-
     "contradictions": [
         "...",
         "..."
@@ -43,22 +31,6 @@ JSON format:
 }}
 
 Scoring Rules:
-
-confidence_score:
-Overall trustworthiness of the report.
-
-source_quality:
-How reliable the sources appear.
-
-source_agreement:
-How strongly the sources support the same conclusions.
-
-coverage_score:
-How complete the research appears.
-
-research_gaps:
-Missing information, unanswered questions,
-areas needing more investigation.
 
 contradictions:
 Any conflicting opinions or findings found
@@ -69,25 +41,29 @@ Return JSON only.
 
     try:
 
-        response = ollama.chat(
-            model="mistral:7b",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        )
+        # response = ollama.chat(
+        #     model="mistral:7b",
+        #     messages=[
+        #         {
+        #             "role": "user",
+        #             "content": prompt
+        #         }
+        #     ]
+        # )
+        # output = response["message"]["content"]
+        
+        output = generate(prompt)
 
         print("\nCRITIC RAW OUTPUT:\n")
-        print(
-              response["message"]["content"]
-        )
+        print(output)
         print("\n")
 
-        return json.loads(
-            response["message"]["content"]
-        )
+        start_idx = output.find('{')
+        end_idx = output.rfind('}')
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            output = output[start_idx:end_idx+1]
+
+        return json.loads(output)
 
     except Exception as e:
 
@@ -97,10 +73,5 @@ Return JSON only.
 
         return {
             "improved_report": report,
-            "confidence_score": 75,
-            "source_quality": 75,
-            "source_agreement": 75,
-            "coverage_score": 75,
-            "research_gaps": [],
             "contradictions": []
         }
