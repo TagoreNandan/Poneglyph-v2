@@ -460,15 +460,69 @@ def research_node(state: ResearchState):
     }
 
 
-def writer_node(state: ResearchState):
+def fetch_report_images(topic: str) -> list:
+    print(f"Fetching images for topic: {topic}")
+    images = []
+    try:
+        from llm.gemini_client import generate
+        from tavily import TavilyClient
+        import os
+        
+        # 1. Ask Gemini for 2 visual queries
+        image_prompt = f"""
+Given the research topic: "{topic}", list 2 distinct and specific visual terms or entities related to this topic that would make good search queries for finding relevant images.
+Output only the 2 queries, one per line. No numbers, no explanation.
 
+Topic: {topic}
+Queries:
+"""
+        response = generate(image_prompt).strip()
+        queries = [q.strip() for q in response.split("\n") if q.strip()]
+        queries = [q for q in queries if len(q) < 100]
+        if not queries:
+            queries = [topic]
+            
+        print(f"Generated image search queries: {queries}")
+        
+        # 2. Search Tavily for images
+        client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+        for query in queries[:2]:
+            try:
+                res = client.search(query=query, include_images=True)
+                img_list = res.get("images", [])
+                print(f"Tavily image search for '{query}' returned {len(img_list)} images")
+                for img in img_list[:2]:
+                    if img and img.startswith("http") and img not in images:
+                        images.append(img)
+            except Exception as e:
+                print(f"Error fetching image for query '{query}': {e}")
+    except Exception as e:
+        print(f"Failed to fetch report images: {e}")
+    
+    return images[:4]
+
+
+def writer_node(state: ResearchState):
+    print("WRITER NODE EXECUTED")
     critic_data = state.get("critic_report")
     report_to_format = state["report"]
+
+    is_failed = (
+        not report_to_format or
+        "temporarily unavailable" in report_to_format.lower() or
+        "no report was generated" in report_to_format.lower() or
+        "failed" in report_to_format.lower()[:100]
+    )
+    
+    images = []
+    if not is_failed:
+        images = fetch_report_images(state["query"])
 
     formatted_report = format_report(
         report=report_to_format,
         query=state["query"],
-        sources=state["sources"]
+        sources=state["sources"],
+        images=images
     )
 
     # Calculate Research Quality Indicators

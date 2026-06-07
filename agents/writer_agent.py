@@ -4,22 +4,35 @@ from datetime import datetime
 def format_report(
     report: str,
     query: str,
-    sources: list
+    sources: list,
+    images: list = None
 ):
 
     timestamp = datetime.now().strftime(
         "%Y-%m-%d %H:%M:%S"
     )
 
-    sources_section = "\n".join(
-        [
-            f"{idx}. {url}"
-            for idx, url in enumerate(
-                sources,
-                start=1
-            )
-        ]
-    )
+    if not sources:
+        sources_section = "No references available."
+    else:
+        sources_section_items = []
+        for idx, source in enumerate(sources, start=1):
+            if isinstance(source, dict):
+                title = source.get("title") or source.get("url") or "Unknown Source"
+                url = source.get("url", "")
+                if source.get("source_type") == "arxiv":
+                    authors = source.get("authors", "Unknown Authors")
+                    year = source.get("year", "Unknown Year")
+                    sources_section_items.append(f"[{idx}] {authors} ({year}). *{title}*. [PDF]({url})")
+                else:
+                    sources_section_items.append(f"[{idx}] [{title}]({url})")
+            else:
+                sources_section_items.append(f"[{idx}] {source}")
+        sources_section = "\n".join(sources_section_items)
+
+    images_section = ""
+    if images:
+        images_section = "\n" + "\n".join([f"![Image]({img})" for img in images]) + "\n\n---\n"
 
     formatted_report = f"""
 # Research Report
@@ -33,10 +46,12 @@ def format_report(
 {timestamp}
 
 ---
-
+{images_section}
 {report}
 
----
+## References
+
+{sources_section}
 
 ---
 

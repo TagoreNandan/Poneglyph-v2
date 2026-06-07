@@ -66,8 +66,32 @@ from reportlab.lib.styles import (
 )
 
 from reportlab.lib import colors
+import re
 
-
+def download_image_flowable(url: str):
+    try:
+        import requests
+        from reportlab.platypus import Image as RLImage
+        from io import BytesIO
+        from PIL import Image as PILImage
+        
+        print(f"Downloading image for PDF: {url}")
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            img_data = BytesIO(resp.content)
+            pil_img = PILImage.open(img_data)
+            width, height = pil_img.size
+            max_width = 400.0
+            if width > max_width:
+                ratio = max_width / width
+                width = max_width
+                height = height * ratio
+            
+            img_data.seek(0)
+            return RLImage(img_data, width=width, height=height)
+    except Exception as e:
+        print(f"Failed to download image flowable for {url}: {e}")
+    return None
 
 def generate_pdf(text, insights):
 
@@ -154,6 +178,17 @@ def generate_pdf(text, insights):
         line = line.strip()
 
         if not line:
+            continue
+
+        # Parse markdown images
+        img_match = re.search(r'!\[.*?\]\((.*?)\)', line)
+        if img_match:
+            img_url = img_match.group(1).strip()
+            img_flowable = download_image_flowable(img_url)
+            if img_flowable:
+                content.append(Spacer(1, 10))
+                content.append(img_flowable)
+                content.append(Spacer(1, 10))
             continue
 
         # markdown headings
