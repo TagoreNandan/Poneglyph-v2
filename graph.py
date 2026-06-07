@@ -462,21 +462,26 @@ def research_node(state: ResearchState):
 
 def fetch_report_images(topic: str) -> list:
     print(f"Fetching images for topic: {topic}")
-    images = []
+    candidates = []
     try:
         from llm.gemini_client import generate
         from tavily import TavilyClient
         import os
+        import json
         
-        # 1. Ask Gemini for 2 visual queries
-        image_prompt = f"""
-Given the research topic: "{topic}", list 2 distinct and specific visual terms or entities related to this topic that would make good search queries for finding relevant images.
-Output only the 2 queries, one per line. No numbers, no explanation.
+        # 1. Generate 5 visual queries based on categories
+        query_generation_prompt = f"""
+Given the research topic: "{topic}", generate exactly 5 distinct search queries optimized for search engines to find high-quality, relevant images for a research report.
+You must generate exactly one query for each of the following categories:
+1. person: A key historical figure or person related to the topic (e.g. "Linus Torvalds portrait" for Linux).
+2. concept: A technical concept diagram, architecture, or model representation (e.g. "Linux kernel architecture diagram").
+3. timeline: A timeline, history infographic, or evolutionary chart (e.g. "Linux history timeline").
+4. landmark: A visual landmark, emblem, famous mascot, or key artifact (e.g. "Tux penguin mascot Linux logo").
+5. overview: A general historical photograph, high-level overview, or key setup (e.g. "early computer running Linux history").
 
-Topic: {topic}
-Queries:
+Do not include category labels or formatting. Output exactly 5 lines, one query per line.
 """
-        response = generate(image_prompt).strip()
+        response = generate(query_generation_prompt).strip()
         queries = [q.strip() for q in response.split("\n") if q.strip()]
         queries = [q for q in queries if len(q) < 100]
         if not queries:
@@ -484,22 +489,75 @@ Queries:
             
         print(f"Generated image search queries: {queries}")
         
-        # 2. Search Tavily for images
+        # 2. Retrieve candidate images (up to 10 unique URLs) via Tavily
         client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
-        for query in queries[:2]:
+        seen_urls = set()
+        
+        for query in queries[:5]:
             try:
                 res = client.search(query=query, include_images=True)
                 img_list = res.get("images", [])
                 print(f"Tavily image search for '{query}' returned {len(img_list)} images")
-                for img in img_list[:2]:
-                    if img and img.startswith("http") and img not in images:
-                        images.append(img)
+                for img in img_list[:3]:  # Take top 3 from each search query
+                    if img and img.startswith("http") and img not in seen_urls:
+                        seen_urls.add(img)
+                        candidates.append({"url": img, "query": query})
             except Exception as e:
                 print(f"Error fetching image for query '{query}': {e}")
+                
+        # Limit to top 10 candidates
+        candidates = candidates[:10]
+        if not candidates:
+            return []
+            
+        # 3. Score and deduplicate candidate images via Gemini
+        scoring_prompt = f"""
+We are generating a research report on the topic: "{topic}".
+We have retrieved the following candidate image URLs along with the search queries that found them.
+
+Evaluate and score each image on a scale from 0 to 10 based on its relevance, usefulness, and quality for the report.
+
+Rules:
+1. Boost (+3 to +5): Diagrams, infographics, portraits/photos of key people, historical photographs, architecture images.
+2. Penalize (-5 to -10): Desktop environment screenshots, UI screenshots, window menus, simple plain logos only (unless it is a famous mascot like Tux), watermarked/stock images.
+3. Deduplicate: If multiple URLs represent the same visual content or key subject, score the duplicates 0 (only keep the best one).
+
+Candidate Images:
+{json.dumps(candidates, indent=2)}
+
+Return the results as a JSON array of objects, containing ONLY the "url", "score", and a brief "reason". Order the array by score descending.
+Return ONLY valid JSON:
+[
+  {{"url": "...", "score": 8, "reason": "..."}},
+  ...
+]
+"""
+        scoring_resp = generate(scoring_prompt).strip()
+        start = scoring_resp.find("[")
+        end = scoring_resp.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            parsed = json.loads(scoring_resp[start:end+1])
+            parsed = sorted(parsed, key=lambda x: x.get("score", 0), reverse=True)
+            final_images = [img["url"] for img in parsed if img.get("score", 0) > 4][:3]
+            if final_images:
+                print(f"Successfully scored and selected {len(final_images)} images.")
+                return final_images
+
     except Exception as e:
-        print(f"Failed to fetch report images: {e}")
-    
-    return images[:4]
+        print(f"Failed to fetch and score report images: {e}")
+        
+    # Fallback deduplication and basic screen/watermark filtering
+    fallback_images = []
+    try:
+        for c in candidates:
+            url_lower = c["url"].lower()
+            if any(x in url_lower for x in ["screenshot", "desktop", "ui", "menu", "watermark"]):
+                continue
+            if c["url"] not in fallback_images:
+                fallback_images.append(c["url"])
+    except Exception:
+        pass
+    return fallback_images[:3]
 
 
 def writer_node(state: ResearchState):
