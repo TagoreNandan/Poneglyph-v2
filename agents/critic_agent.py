@@ -22,19 +22,8 @@ Analyze the report and return ONLY valid JSON.
 JSON format:
 
 {{
-    "improved_report": "...",
-
-    "contradictions": [
-        "...",
-        "..."
-    ]
+    "improved_report": "..."
 }}
-
-Scoring Rules:
-
-contradictions:
-Any conflicting opinions or findings found
-inside the report.
 
 Return JSON only.
 """
@@ -72,6 +61,5 @@ Return JSON only.
         )
 
         return {
-            "improved_report": report,
-            "contradictions": []
+            "improved_report": report
         }

@@ -373,12 +373,9 @@ def critic_node(state: ResearchState):
     if is_failed:
         return {
             "critic_report": {
-                "improved_report": report,
-                "contradictions": []
+                "improved_report": report
             },
-            "insights": {
-                "contradictions": []
-            }
+            "insights": {}
         }
 
     critic_result = review_report(
@@ -386,13 +383,11 @@ def critic_node(state: ResearchState):
         report=report
     )
 
-    log = state.get("activity_log", []) + [{"agent": "Critic Agent", "action": "Identified research gaps and contradictions"}]
+    log = state.get("activity_log", []) + [{"agent": "Critic Agent", "action": "Reviewed report"}]
 
     return {
         "critic_report": critic_result,
-        "insights": {
-            "contradictions": critic_result.get("contradictions", [])
-        },
+        "insights": {},
         "activity_log": log
     }
 

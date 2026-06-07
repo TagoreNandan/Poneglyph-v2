@@ -370,14 +370,6 @@ function App() {
                   </div>
                 </div>
 
-                <div className="alerts-grid">
-                  <div className="alert-card">
-                    <div className="alert-header contra"><AlertTriangle size={18} /> Contradictions</div>
-                    <ul className="alert-list">
-                      {insights.contradictions?.length > 0 ? insights.contradictions.map((c, i) => <li key={i}>{c}</li>) : <li>No contradictions found.</li>}
-                    </ul>
-                  </div>
-                </div>
               </>
             )}
 

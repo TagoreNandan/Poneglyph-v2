@@ -120,33 +120,7 @@ def generate_pdf(text, insights):
     content.append(Paragraph(f"Evidence Coverage: {coverage_str}", styles["BodyText"]))
     
 
-    content.append(
-        Paragraph(
-            "Contradictions",
-            styles["Heading2"]
-        )
-    )
-    
-    contradictions = insights.get(
-    "contradictions",
-    []
-    )
-    
-    if contradictions:
-        for item in contradictions:
-            content.append(
-            Paragraph(
-                f"• {item}",
-                styles["BodyText"]
-            )
-        )
-    else:
-        content.append(
-            Paragraph(
-            "None",
-            styles["BodyText"]
-        )
-    )
+
 
     content.append(
         Paragraph(
@@ -506,14 +480,7 @@ else:
             </div>
             """
             st.markdown(metric_html, unsafe_allow_html=True)
-            
-            with st.expander("Contradictions", expanded=False):
-                contradictions = insights.get("contradictions", [])
-                if contradictions:
-                    for item in contradictions:
-                        st.markdown(render_contradiction_alert(item), unsafe_allow_html=True)
-                else:
-                    st.markdown(render_contradiction_alert("No contradictions found."), unsafe_allow_html=True)
+
             
             st.markdown("<hr/>", unsafe_allow_html=True)
             
