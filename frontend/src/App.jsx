@@ -752,7 +752,6 @@ function App() {
       <div className="sidebar">
         <div className="sidebar-header">
           <span className="sidebar-title">Poneglyph Research</span>
-          <span className="sidebar-subtitle">PREMIUM TIER</span>
         </div>
         
         {/* Main Navigation Links */}
@@ -847,14 +846,6 @@ function App() {
           )}
         </div>
 
-        {/* Upgrade block */}
-        <button className="upgrade-btn">
-          UPGRADE TO PRO
-        </button>
-        <div className="sidebar-footer">
-          <HelpCircle size={16} />
-          <ShieldAlert size={16} />
-        </div>
       </div>
 
       {/* TOP NAVIGATION BAR & CONTENT WORKSPACE */}
