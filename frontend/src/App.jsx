@@ -462,6 +462,28 @@ function App() {
     }, "");
   };
 
+  const handleNewSearch = () => {
+    setActiveReport(null);
+    setActiveReportId(null);
+    setQuery('');
+    setError(null);
+    setActiveNav('archives');
+    window.history.pushState({
+      activeNav: 'archives',
+      activeReportId: null,
+      activeReport: null,
+      activeTopic: '',
+      route: null,
+      insights: null,
+      sources: [],
+      selectedCollection: null,
+      timestamp: ''
+    }, "");
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
+  };
+
   const handleChatSubmit = async (e) => {
     e.preventDefault();
     if (!chatInput.trim() || !activeReport) return;
@@ -829,7 +851,7 @@ function App() {
   const activeQueries = history ? new Set(history.map(item => item.title)).size : 0;
   const signalIntegrity = totalReports > 0 ? "100%" : "N/A";
   
-  const recentReports = (history || [])
+  const recentReports = getCleanedHistory()
     .filter(item => item && item.title && !item.title.includes("Neural Network Sustainability Crisis"))
     .slice(0, 3);
 
@@ -892,7 +914,7 @@ function App() {
             <p style={{ fontSize: 11, color: 'var(--on-surface-variant)', fontStyle: 'italic', padding: '0 8px' }}>No records saved.</p>
           ) : (
             (() => {
-              const filtered = (history || []).filter(item => item && item.title && item.title.toLowerCase().includes((historySearch || '').toLowerCase()));
+              const filtered = getCleanedHistory().filter(item => item && item.title && item.title.toLowerCase().includes((historySearch || '').toLowerCase()));
               const groups = groupHistory(filtered);
               
               const renderGroup = (title, items) => {
@@ -949,13 +971,13 @@ function App() {
         {/* PONEGLYPH TOP NAVIGATION */}
         <header className="poneglyph-header">
           <div className="header-left">
-            <span className="logo-text" onClick={() => { setActiveReport(null); setActiveReportId(null); setError(null); }}>Poneglyph</span>
+            <span className="logo-text" onClick={() => handleNavClick('archives')}>Poneglyph</span>
           </div>
           <div className="header-right">
-            <button className="new-search-btn" onClick={() => { setActiveReport(null); setActiveReportId(null); setQuery(''); setError(null); }}>
+            <button className="new-search-btn" onClick={handleNewSearch}>
               New Search
             </button>
-            <div className="profile-btn">
+            <div className="profile-btn" onClick={() => handleNavClick('settings')}>
               <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
@@ -986,6 +1008,7 @@ function App() {
                 <h1>Search the Archive.</h1>
                 <form onSubmit={handleGenerate} className="search-bar-underlined">
                   <input 
+                    ref={searchInputRef}
                     type="text" 
                     className="search-input-underlined" 
                     placeholder="Inquire about the future..." 
