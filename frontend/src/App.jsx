@@ -871,7 +871,7 @@ function App() {
   const reportData = parseReportMarkdown(activeReport, activeTopic);
   const totalReports = history?.length ?? 0;
   const activeQueries = history ? new Set(history.map(item => item.title)).size : 0;
-  const signalIntegrity = totalReports > 0 ? "100%" : "N/A";
+  const duplicationRate = totalReports > 0 ? (((totalReports - activeQueries) / totalReports) * 100).toFixed(1) + "%" : "0%";
   
   const recentReports = getCleanedHistory()
     .filter(item => item && item.title && !item.title.includes("Neural Network Sustainability Crisis"))
@@ -1068,8 +1068,8 @@ function App() {
                         <span className="stat-val">{activeQueries}</span>
                       </div>
                       <div className="stat-line">
-                        <span className="stat-label">Signal Integrity</span>
-                        <span className="stat-val colored">{signalIntegrity}</span>
+                        <span className="stat-label">Duplication Rate</span>
+                        <span className="stat-val colored">{duplicationRate}</span>
                       </div>
                     </div>
                   </div>
