@@ -377,7 +377,7 @@ function App() {
     setScrollProgress(0);
     setChatOpen(false);
     
-    const nextNav = (activeNav === 'collections' || activeNav === 'settings') ? activeNav : 'archives';
+    const nextNav = activeNav;
     
     try {
       const report = await fetchReport(id);
@@ -459,6 +459,21 @@ function App() {
       insights: null,
       sources: [],
       selectedCollection: null,
+      timestamp: ''
+    }, "");
+  };
+
+  const handleSelectCollection = (name) => {
+    setSelectedCollection(name);
+    window.history.pushState({
+      activeNav: 'collections',
+      activeReportId: null,
+      activeReport: null,
+      activeTopic: '',
+      route: null,
+      insights: null,
+      sources: [],
+      selectedCollection: name,
       timestamp: ''
     }, "");
   };
@@ -771,7 +786,13 @@ function App() {
       return (
         <div className="collections-container">
           <div className="collections-header-row" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
-            <button className="back-collection-btn" onClick={() => setSelectedCollection(null)}>
+            <button className="back-collection-btn" onClick={() => {
+              if (window.history.state && window.history.state.selectedCollection) {
+                window.history.back();
+              } else {
+                setSelectedCollection(null);
+              }
+            }}>
               &larr; Back to Folders
             </button>
             <h1>{categories.find(c => c.name === selectedCollection)?.label}</h1>
@@ -829,7 +850,7 @@ function App() {
               <div 
                 key={cat.name} 
                 className="collection-folder-card"
-                onClick={() => setSelectedCollection(cat.name)}
+                onClick={() => handleSelectCollection(cat.name)}
                 style={{ cursor: 'pointer' }}
               >
                 <div className="folder-icon-row">
@@ -861,148 +882,9 @@ function App() {
   const prevReportItem = activeIndex > 0 ? history[activeIndex - 1] : null;
   const nextReportItem = activeIndex !== -1 && activeIndex < (history || []).length - 1 ? history[activeIndex + 1] : null;
 
-  return (
-    <div className="app-container">
-      {/* Top scroll tracker progress bar */}
-      <div className="scroll-progress" style={{ width: `${scrollProgress}%` }} />
-
-      {/* PERSISTENT LEFT NAVIGATION SIDEBAR */}
-      <div className="sidebar">
-        <div className="sidebar-header">
-          <span className="sidebar-title">Poneglyph Research</span>
-        </div>
-        
-        {/* Main Navigation Links */}
-        <div className="nav-section">
-          <button 
-            className={`nav-item ${activeNav === 'history' ? 'active' : ''}`}
-            onClick={() => handleNavClick('history')}
-          >
-            <Activity size={15} /> History
-          </button>
-          <button 
-            className={`nav-item ${activeNav === 'archives' ? 'active' : ''}`}
-            onClick={() => handleNavClick('archives')}
-          >
-            <Archive size={15} /> Archives
-          </button>
-          <button 
-            className={`nav-item ${activeNav === 'collections' ? 'active' : ''}`}
-            onClick={() => handleNavClick('collections')}
-          >
-            <Folder size={15} /> Collections
-          </button>
-          <button 
-            className={`nav-item ${activeNav === 'settings' ? 'active' : ''}`}
-            onClick={() => handleNavClick('settings')}
-          >
-            <Settings size={15} /> Settings
-          </button>
-        </div>
-
-        {/* Archives/History selection list */}
-        <h4 className="sidebar-history-title">Saved Archives</h4>
-        <input 
-          type="text" 
-          className="history-search-input" 
-          placeholder="Filter archives..." 
-          value={historySearch}
-          onChange={e => setHistorySearch(e.target.value)}
-        />
-
-        <div className="history-list">
-          {totalReports === 0 ? (
-            <p style={{ fontSize: 11, color: 'var(--on-surface-variant)', fontStyle: 'italic', padding: '0 8px' }}>No records saved.</p>
-          ) : (
-            (() => {
-              const filtered = getCleanedHistory().filter(item => item && item.title && item.title.toLowerCase().includes((historySearch || '').toLowerCase()));
-              const groups = groupHistory(filtered);
-              
-              const renderGroup = (title, items) => {
-                if (!items || items.length === 0) return null;
-                return (
-                  <div className="history-group-section">
-                    <h5 className="history-group-header">{title}</h5>
-                    {items.map(item => {
-                      let timeStr = "";
-                      if (item.timestamp) {
-                        const parsedTime = item.timestamp.includes('T') ? item.timestamp : item.timestamp.replace(' ', 'T') + 'Z';
-                        const dateObj = new Date(parsedTime);
-                        if (title === "Today") {
-                          timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                        } else {
-                          timeStr = dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' });
-                        }
-                      }
-                      return (
-                        <button 
-                          key={item.id} 
-                          className={`history-item ${activeReportId === item.id ? 'active' : ''}`} 
-                          onClick={() => handleSelectHistory(item.id)}
-                          title={item.title}
-                        >
-                          <div className="history-item-left" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
-                            <span className="history-item-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</span>
-                          </div>
-                          {timeStr && <span className="history-item-time">{timeStr}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              };
-
-              return (
-                <>
-                  {renderGroup("Today", groups.today)}
-                  {renderGroup("Yesterday", groups.yesterday)}
-                  {renderGroup("This Week", groups.thisWeek)}
-                  {renderGroup("Older", groups.older)}
-                </>
-              );
-            })()
-          )}
-        </div>
-
-      </div>
-
-      {/* TOP NAVIGATION BAR & CONTENT WORKSPACE */}
-      <div className="main-viewport-wrapper">
-        
-        {/* PONEGLYPH TOP NAVIGATION */}
-        <header className="poneglyph-header">
-          <div className="header-left">
-            <span className="logo-text" onClick={() => handleNavClick('archives')}>Poneglyph</span>
-          </div>
-          <div className="header-right">
-            <button className="new-search-btn" onClick={handleNewSearch}>
-              New Search
-            </button>
-            <div className="profile-btn" onClick={() => handleNavClick('settings')}>
-              <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            </div>
-          </div>
-        </header>
-
-        {/* WORKSPACE AREA */}
-        <div className="main-content" onScroll={handleScroll}>
-          {isLoading ? (
-            <div className="loader">
-              <div className="spinner"></div>
-              <p>Agents are synthesizing data...</p>
-            </div>
-          ) : activeNav === 'settings' ? (
-            renderSettingsView()
-          ) : activeNav === 'collections' ? (
-            renderCollectionsView()
-          ) : activeNav === 'history' ? (
-            renderHistoryView()
-          ) : !activeReport ? (
-            /* PONEGLYPH MAGAZINE HOME PAGE LAYOUT */
-            <div className="home-container">
+    const renderHomeView = () => {
+    return (
+      <div className="home-container">
               
               {/* Header Search widget */}
               <div className="hero-search">
@@ -1196,9 +1078,12 @@ function App() {
               </div>
 
             </div>
-          ) : (
-            /* PONEGLYPH REPORT READ VIEW (3-COLUMN LAYOUT) */
-            <div className="report-container">
+    );
+  };
+
+  const renderReportView = () => {
+    return (
+      <div className="report-container">
               
               {/* CENTER COLUMN (Reading Layout) */}
               <div className="report-center-column">
@@ -1455,6 +1340,152 @@ function App() {
               </div>
 
             </div>
+    );
+  };
+
+  return (
+    <div className="app-container">
+      {/* Top scroll tracker progress bar */}
+      <div className="scroll-progress" style={{ width: `${scrollProgress}%` }} />
+
+      {/* PERSISTENT LEFT NAVIGATION SIDEBAR */}
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <span className="sidebar-title">Poneglyph Research</span>
+        </div>
+        
+        {/* Main Navigation Links */}
+        <div className="nav-section">
+          <button 
+            className={`nav-item ${activeNav === 'history' ? 'active' : ''}`}
+            onClick={() => handleNavClick('history')}
+          >
+            <Activity size={15} /> History
+          </button>
+          <button 
+            className={`nav-item ${activeNav === 'archives' ? 'active' : ''}`}
+            onClick={() => handleNavClick('archives')}
+          >
+            <Archive size={15} /> Archives
+          </button>
+          <button 
+            className={`nav-item ${activeNav === 'collections' ? 'active' : ''}`}
+            onClick={() => handleNavClick('collections')}
+          >
+            <Folder size={15} /> Collections
+          </button>
+          <button 
+            className={`nav-item ${activeNav === 'settings' ? 'active' : ''}`}
+            onClick={() => handleNavClick('settings')}
+          >
+            <Settings size={15} /> Settings
+          </button>
+        </div>
+
+        {/* Archives/History selection list */}
+        <h4 className="sidebar-history-title">Saved Archives</h4>
+        <input 
+          type="text" 
+          className="history-search-input" 
+          placeholder="Filter archives..." 
+          value={historySearch}
+          onChange={e => setHistorySearch(e.target.value)}
+        />
+
+        <div className="history-list">
+          {totalReports === 0 ? (
+            <p style={{ fontSize: 11, color: 'var(--on-surface-variant)', fontStyle: 'italic', padding: '0 8px' }}>No records saved.</p>
+          ) : (
+            (() => {
+              const filtered = getCleanedHistory().filter(item => item && item.title && item.title.toLowerCase().includes((historySearch || '').toLowerCase()));
+              const groups = groupHistory(filtered);
+              
+              const renderGroup = (title, items) => {
+                if (!items || items.length === 0) return null;
+                return (
+                  <div className="history-group-section">
+                    <h5 className="history-group-header">{title}</h5>
+                    {items.map(item => {
+                      let timeStr = "";
+                      if (item.timestamp) {
+                        const parsedTime = item.timestamp.includes('T') ? item.timestamp : item.timestamp.replace(' ', 'T') + 'Z';
+                        const dateObj = new Date(parsedTime);
+                        if (title === "Today") {
+                          timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                        } else {
+                          timeStr = dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                        }
+                      }
+                      return (
+                        <button 
+                          key={item.id} 
+                          className={`history-item ${activeReportId === item.id ? 'active' : ''}`} 
+                          onClick={() => handleSelectHistory(item.id)}
+                          title={item.title}
+                        >
+                          <div className="history-item-left" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                            <span className="history-item-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</span>
+                          </div>
+                          {timeStr && <span className="history-item-time">{timeStr}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              };
+
+              return (
+                <>
+                  {renderGroup("Today", groups.today)}
+                  {renderGroup("Yesterday", groups.yesterday)}
+                  {renderGroup("This Week", groups.thisWeek)}
+                  {renderGroup("Older", groups.older)}
+                </>
+              );
+            })()
+          )}
+        </div>
+
+      </div>
+
+      {/* TOP NAVIGATION BAR & CONTENT WORKSPACE */}
+      <div className="main-viewport-wrapper">
+        
+        {/* PONEGLYPH TOP NAVIGATION */}
+        <header className="poneglyph-header">
+          <div className="header-left">
+            <span className="logo-text" onClick={() => handleNavClick('archives')}>Poneglyph</span>
+          </div>
+          <div className="header-right">
+            <button className="new-search-btn" onClick={handleNewSearch}>
+              New Search
+            </button>
+            <div className="profile-btn" onClick={() => handleNavClick('settings')}>
+              <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </div>
+          </div>
+        </header>
+
+        {/* WORKSPACE AREA */}
+        <div className="main-content" onScroll={handleScroll}>
+          {isLoading ? (
+            <div className="loader">
+              <div className="spinner"></div>
+              <p>Agents are synthesizing data...</p>
+            </div>
+          ) : activeReport ? (
+            renderReportView()
+          ) : activeNav === 'settings' ? (
+            renderSettingsView()
+          ) : activeNav === 'collections' ? (
+            renderCollectionsView()
+          ) : activeNav === 'history' ? (
+            renderHistoryView()
+          ) : (
+            renderHomeView()
           )}
         </div>
       </div>
