@@ -709,51 +709,24 @@ function App() {
     return (
       <div className="settings-container">
         <h1>Archival Settings</h1>
-        <p className="settings-subtitle">Manage model endpoints, retrieval depths, and search API keys.</p>
+        <p className="settings-subtitle">Manage research preferences and workflow options.</p>
         
         <div className="settings-grid">
           <div className="settings-card">
-            <h3>LLM Node Configuration</h3>
-            <div className="settings-form-group">
-              <label>PRIMARY RESEARCH MODEL</label>
-              <select defaultValue="gemini-2.5-flash" disabled style={{ opacity: 0.8 }}>
-                <option value="gemini-2.5-flash">gemini-2.5-flash (Google GenAI Client)</option>
-                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-              </select>
-            </div>
-            <div className="settings-form-group">
-              <label>FALLBACK MODEL</label>
-              <select defaultValue="groq-llama-3" disabled style={{ opacity: 0.8 }}>
-                <option value="groq-llama-3">groq-llama3-70b-8192 (Groq Client)</option>
-              </select>
-            </div>
-            <div className="settings-form-group switch-group">
-              <label className="switch-label" htmlFor="bypass-toggle">
+            <h3>Workflow Configuration</h3>
+            <div className="settings-form-group switch-group" style={{ marginTop: '16px' }}>
+              <label className="switch-label" htmlFor="bypass-toggle" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                 <input 
                   type="checkbox" 
                   id="bypass-toggle"
                   checked={bypassClarification} 
                   onChange={(e) => handleBypassToggle(e.target.checked)} 
                 />
-                <span className="switch-text">Bypass Clarification Prompts</span>
+                <span className="switch-text" style={{ fontWeight: 600 }}>Bypass Clarification Prompts</span>
               </label>
-              <p className="setting-desc">Bypass ambiguity/clarification checks and auto-generate report directly.</p>
-            </div>
-          </div>
-          
-          <div className="settings-card">
-            <h3>API Keys & Retrieval</h3>
-            <div className="settings-form-group">
-              <label>GEMINI API KEY</label>
-              <input type="password" value="••••••••••••••••••••••••••••••••" readOnly style={{ opacity: 0.7 }} />
-            </div>
-            <div className="settings-form-group">
-              <label>TAVILY API KEY</label>
-              <input type="password" value="••••••••••••••••••••••••••••••••" readOnly style={{ opacity: 0.7 }} />
-            </div>
-            <div className="settings-form-group">
-              <label>ARXIV MAX RESULTS</label>
-              <input type="number" value={5} readOnly style={{ opacity: 0.8 }} />
+              <p className="setting-desc" style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginTop: '8px' }}>
+                Bypass ambiguity/clarification checks and auto-generate reports directly without asking for clarification.
+              </p>
             </div>
           </div>
         </div>
