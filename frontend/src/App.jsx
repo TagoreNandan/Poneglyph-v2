@@ -734,6 +734,9 @@ function App() {
   // Defensive parsing and data binding
   const reportData = parseReportMarkdown(activeReport, activeTopic);
   const totalReports = history?.length ?? 0;
+  const activeQueries = history ? new Set(history.map(item => item.title)).size : 0;
+  const signalIntegrity = totalReports > 0 ? "100%" : "N/A";
+  
   const recentReports = (history || [])
     .filter(item => item && item.title && !item.title.includes("Neural Network Sustainability Crisis"))
     .slice(0, 3);
@@ -1062,31 +1065,13 @@ function App() {
                       </div>
                       <div className="stat-line">
                         <span className="stat-label">Active Queries</span>
-                        <span className="stat-val">{totalReports}</span>
+                        <span className="stat-val">{activeQueries}</span>
                       </div>
                       <div className="stat-line">
                         <span className="stat-label">Signal Integrity</span>
-                        <span className="stat-val colored">100%</span>
+                        <span className="stat-val colored">{signalIntegrity}</span>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Citation of the Week */}
-                  <div className="info-panel-card citation-card">
-                    <h5 className="info-panel-title">Citation of the Week</h5>
-                    <p className="citation-text">
-                      "The preservation of ambiguity is the highest form of digital curation in an era that demands binary certainty."
-                    </p>
-                    <span className="citation-author">— MARFA INSTITUTE FOR DIGITAL HUMANITIES</span>
-                  </div>
-
-                  {/* Kyoto Archival Ethics connect card */}
-                  <div className="info-panel-card black-ethics-card" style={{ cursor: 'pointer' }} onClick={() => handleArchiveClick("Retro-Future datasets and the curation of nostalgia")}>
-                    <h5 className="ethics-card-title">Archival Ethics Summit</h5>
-                    <p className="ethics-card-text">Join the live feed from the Kyoto Archive Lab.</p>
-                    <button className="connect-live-btn">
-                      CONNECT LIVE
-                    </button>
                   </div>
                 </div>
 
