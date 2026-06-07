@@ -1,4 +1,6 @@
 from typing import TypedDict, Dict, Any
+import re
+import urllib.parse
 
 from langgraph.graph import StateGraph, END
 
@@ -10,13 +12,267 @@ from agents.critic_agent import review_report
 from memory.database import save_research
 
 from agents.router_agent import classify_query
+from agents.ambiguity_agent import detect_ambiguity
 
 from rag.retriever import retrieve
 from agents.rag_answer_agent import generate_rag_answer
 
+def is_valid_evidence(text: str) -> bool:
+    if not text:
+        return False
+    stripped = text.strip()
+    if len(stripped) < 35:
+        return False
+    words = stripped.split()
+    if len(words) < 6:
+        return False
+        
+    # Complete sentence check:
+    # 1. First character must be uppercase letter, digit, or quote
+    if not (stripped[0].isupper() or stripped[0].isdigit() or stripped[0] in ['"', "'", "“", "‘"]):
+        return False
+    # 2. Must end with sentence punctuation, optionally followed by quotes/brackets/citations
+    if not re.search(r'(?:[.!?]\s*(?:\[\d+\]|["\'”’]|\s)*|\[\d+\]\s*[.!?]\s*(?:["\'”’]|\s)*)$', stripped):
+        return False
+        
+    text_lower = stripped.lower()
+    junk = [
+        "sign up", "log in", "sign in", "create account", "forgot password", "reset password",
+        "log out", "logout", "signin", "signup", "login", "register", "logged in", "sign-up", "log-in",
+        "skip navigation", "skip to main content", "navigation menu", "toggle navigation", "skip to content",
+        "all rights reserved", "cookie policy", "privacy policy", "terms of service", "terms of use",
+        "javascript is disabled", "enable javascript", "please check the url", "page not found",
+        "404 error", "access denied", "reddit home", "youtube home", "subscribe now",
+        "share this", "follow us", "comment below", "click here", "read more", "newsletter",
+        "cookies on our website", "agree to our use", "accept all", "manage settings",
+        "facebook", "twitter", "linkedin", "instagram", "pinterest", "reddit app", "youtube app",
+        "menu", "dropdown", "navigation", "sidebar", "footer", "header", "copyright",
+        "search on google", "google search", "web page", "web site", "browser", "refresh page",
+        "user agreement", "privacy settings", "cookie settings", "privacy center", "cookie banner",
+        "cookie notice", "privacy statement", "data protection", "tiktok", "snapchat", "discord",
+        "telegram", "whatsapp", "share on", "tweet", "view on",
+        "discussion in", "discussion thread", "started by", "thread starter", "posts:", "joined:",
+        "table of contents", "table of content", "jump to navigation", "jump to search", "jump to content",
+        "view history", "edit history", "page history", "sitemap", "site map"
+    ]
+    if any(pattern in text_lower for pattern in junk):
+        return False
+    if "http://" in text_lower or "https://" in text_lower or "www." in text_lower:
+        return False
+        
+    return True
+
+def calculate_quality_metrics(report: str, sources: list, current_year=2026):
+    is_failed = (
+        not report or
+        "Research generation failed" in report or
+        "# Error" in report or
+        "Gemini Error" in report or
+        "Groq Fallback Error" in report or
+        "failed" in report.lower()[:100] or
+        "temporarily unavailable" in report.lower() or
+        "no report was generated" in report.lower()
+    )
+    if is_failed:
+        return {
+            "references_used": "N/A",
+            "unique_sources": "N/A",
+            "average_source_freshness": "N/A",
+            "citation_density": "N/A",
+            "evidence_coverage": "N/A",
+            "evidence_panel": []
+        }
+
+    word_count = len(report.split()) if report else 0
+    if word_count == 0:
+        return {
+            "references_used": 0,
+            "unique_sources": 0,
+            "average_source_freshness": "N/A",
+            "citation_density": 0.0,
+            "evidence_coverage": 0.0,
+            "evidence_panel": []
+        }
+        
+    citations = re.findall(r'\[(\d+)\]', report)
+    citations_count = len(citations)
+    
+    citations_indices = set()
+    for c in citations:
+        idx = int(c)
+        if 1 <= idx <= len(sources):
+            citations_indices.add(idx)
+            
+    references_used = len(citations_indices)
+    
+    unique_domains = set()
+    for idx in citations_indices:
+        src = sources[idx - 1]
+        url = src.get("url", "")
+        if url:
+            try:
+                parsed = urllib.parse.urlparse(url)
+                domain = parsed.netloc or url
+                unique_domains.add(domain)
+            except Exception:
+                unique_domains.add(url)
+        else:
+            unique_domains.add(src.get("title", f"Source {idx}"))
+    unique_sources = len(unique_domains)
+    
+    years = []
+    for src in sources:
+        if src.get("year"):
+            try:
+                years.append(int(src["year"]))
+                continue
+            except ValueError:
+                pass
+        url = src.get("url", "")
+        url_years = re.findall(r'/20[0-2][0-9]/', url)
+        if url_years:
+            years.append(int(url_years[0].strip('/')))
+            continue
+        content = src.get("content", "") + " " + src.get("title", "")
+        content_years = re.findall(r'\b(20[0-2][0-9])\b', content)
+        if content_years:
+            valid_years = [int(y) for y in content_years if int(y) <= current_year]
+            if valid_years:
+                years.append(max(valid_years))
+                continue
+        years.append(current_year)
+        
+    avg_year = sum(years) / len(years) if years else current_year
+    avg_source_freshness = round(avg_year, 1)
+    
+    citation_density = round(citations_count / word_count, 4)
+    
+    # Extract body paragraphs properly:
+    # Process lines sequentially. Ignore empty lines, headers, horizontal rules, and metadata fields.
+    lines = report.split("\n")
+    body_paragraphs = []
+    current_para = []
+    in_references = False
+    
+    for line in lines:
+        line_strip = line.strip()
+        if not line_strip:
+            if current_para:
+                body_paragraphs.append(" ".join(current_para))
+                current_para = []
+            continue
+            
+        if line_strip.startswith("## References") or line_strip.startswith("# References") or in_references:
+            in_references = True
+            if current_para:
+                body_paragraphs.append(" ".join(current_para))
+                current_para = []
+            continue
+            
+        if line_strip.startswith("#") or line_strip.startswith("---") or "Generated by ResearchPilot" in line_strip:
+            if current_para:
+                body_paragraphs.append(" ".join(current_para))
+                current_para = []
+            continue
+            
+        if line_strip.startswith("**Authors**:") or line_strip.startswith("**Year**:") or line_strip.startswith("**URL**:") or line_strip.startswith("**Link**:") or line_strip.startswith("**Topic**:"):
+            if current_para:
+                body_paragraphs.append(" ".join(current_para))
+                current_para = []
+            continue
+            
+        current_para.append(line_strip)
+        
+    if current_para:
+        body_paragraphs.append(" ".join(current_para))
+        
+    # Filter out empty or too short paragraphs
+    body_paragraphs = [bp for bp in body_paragraphs if len(bp) > 20]
+    
+    if body_paragraphs:
+        paragraphs_with_citations = sum(1 for p in body_paragraphs if re.search(r'\[\d+\]', p))
+        evidence_coverage = round(paragraphs_with_citations / len(body_paragraphs), 4)
+    else:
+        evidence_coverage = 0.0
+        
+    evidence_panel = []
+    for idx in sorted(citations_indices):
+        src = sources[idx - 1]
+        title = src.get("title", "Unknown Source")
+        url = src.get("url", "")
+        content = src.get("raw_content") or src.get("content") or ""
+        
+        paragraphs = report.split("\n\n")
+        context_sentences = []
+        for p in paragraphs:
+            if f"[{idx}]" in p:
+                sentences = re.split(r'(?<=[.!?])\s+', p)
+                for s in sentences:
+                    if f"[{idx}]" in s:
+                        context_sentences.append(s)
+        context_text = " ".join(context_sentences)
+        
+        excerpt = ""
+        source_sentences = []
+        if content:
+            source_sentences = re.split(r'(?<=[.!?])\s+', content)
+            source_sentences = [s.strip() for s in source_sentences if len(s.strip()) > 15]
+            
+            context_words = set(re.findall(r'\w+', context_text.lower()))
+            stopwords = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "with", "is", "was", "were", "of", "that", "this", "these", "those"}
+            context_keywords = context_words - stopwords
+            
+            # Sort sentences by overlap
+            sentence_overlaps = []
+            for s in source_sentences:
+                s_words = set(re.findall(r'\w+', s.lower())) - stopwords
+                overlap = len(context_keywords.intersection(s_words))
+                sentence_overlaps.append((overlap, s))
+            
+            # Sort descending by overlap
+            sentence_overlaps.sort(key=lambda x: x[0], reverse=True)
+            
+            for overlap, s in sentence_overlaps:
+                if overlap >= 2 and is_valid_evidence(s):
+                    excerpt = s
+                    break
+                    
+        # If no excerpt found with overlap, search for any valid sentence in source_sentences
+        if not excerpt and source_sentences:
+            for s in source_sentences:
+                if is_valid_evidence(s):
+                    excerpt = s
+                    break
+            
+        if len(excerpt) > 400:
+            excerpt = excerpt[:400] + "..."
+            
+        if not excerpt:
+            excerpt = "Evidence unavailable for this source."
+            
+        evidence_panel.append({
+            "index": idx,
+            "title": title,
+            "url": url,
+            "excerpt": excerpt
+        })
+        
+    return {
+        "references_used": references_used,
+        "unique_sources": unique_sources,
+        "average_source_freshness": avg_source_freshness,
+        "citation_density": citation_density,
+        "evidence_coverage": evidence_coverage,
+        "evidence_panel": evidence_panel
+    }
+
 class ResearchState(TypedDict):
     query: str
     route: str
+    bypass_ambiguity: bool
+    
+    needs_clarification: bool
+    clarification_options: list
 
     search_results: list
     processed_sources: list
@@ -33,6 +289,30 @@ class ResearchState(TypedDict):
     insights: Dict[str, Any]
 
     sources: list
+    activity_log: list
+
+# -------------------------
+# AMBIGUITY CHECK
+# -------------------------
+
+def ambiguity_node(state: ResearchState):
+    print("AMBIGUITY NODE EXECUTED")
+    
+    if state.get("bypass_ambiguity", False) or len(state["query"].split()) > 3:
+        return {
+            "needs_clarification": False,
+            "clarification_options": []
+        }
+    
+    result = detect_ambiguity(state["query"])
+    
+    log = state.get("activity_log", []) + [{"agent": "Ambiguity Agent", "action": f"Checked query ambiguity. Needs clarification: {result.get('needs_clarification')}"}]
+    
+    return {
+        "needs_clarification": result.get("needs_clarification", False),
+        "clarification_options": result.get("options", []),
+        "activity_log": log
+    }
 
 # -------------------------
 # ROUTER
@@ -48,8 +328,11 @@ def router_node(state: ResearchState):
         f"\nROUTE SELECTED: {route}\n"
     )
 
+    log = state.get("activity_log", []) + [{"agent": "Router Agent", "action": f"Classified query as {route}"}]
+
     return {
-        "route": route
+        "route": route,
+        "activity_log": log
     }
 
 
@@ -66,41 +349,55 @@ def route_decision(state: ResearchState):
     elif route == "HYBRID":
         return "hybrid"
 
+    elif route == "ARXIV":
+        return "arxiv"
+
     else:
         return "search"
 
 def critic_node(state: ResearchState):
-
     print("CRITIC NODE EXECUTED")
+    report = state.get("report", "")
+    
+    # Bypass Critic LLM call if the report failed
+    is_failed = (
+        not report or
+        "Research generation failed" in report or
+        "# Error" in report or
+        "Gemini Error" in report or
+        "Groq Fallback Error" in report or
+        "failed" in report.lower()[:100] or
+        "temporarily unavailable" in report.lower() or
+        "no report was generated" in report.lower()
+    )
+    if is_failed:
+        return {
+            "critic_report": {
+                "improved_report": report,
+                "research_gaps": [],
+                "contradictions": []
+            },
+            "insights": {
+                "research_gaps": [],
+                "contradictions": []
+            }
+        }
 
     critic_result = review_report(
         query=state["query"],
-        report=state["report"]
+        report=report
     )
 
+    log = state.get("activity_log", []) + [{"agent": "Critic Agent", "action": "Identified research gaps and contradictions"}]
+
     return {
-    "critic_report": critic_result,
-
-    "insights": {
-        "confidence_score":
-            critic_result["confidence_score"],
-
-        "source_quality":
-            critic_result["source_quality"],
-
-        "source_agreement":
-            critic_result["source_agreement"],
-
-        "coverage_score":
-            critic_result["coverage_score"],
-
-        "research_gaps":
-            critic_result["research_gaps"],
-
-        "contradictions":
-            critic_result["contradictions"]
+        "critic_report": critic_result,
+        "insights": {
+            "research_gaps": critic_result.get("research_gaps", []),
+            "contradictions": critic_result.get("contradictions", [])
+        },
+        "activity_log": log
     }
-}
 
 
 # -------------------------
@@ -115,13 +412,21 @@ def search_node(state: ResearchState):
     )
 
     sources = [
-        result["url"]
-        for result in results[:3]
+        {
+            "title": result.get("title", result["url"]),
+            "url": result["url"],
+            "content": result.get("content", ""),
+            "raw_content": result.get("raw_content", "")
+        }
+        for result in results[:5]
     ]
+
+    log = state.get("activity_log", []) + [{"agent": "Search Agent", "action": f"Retrieved {len(sources)} sources"}]
 
     return {
         "search_results": results,
-        "sources": sources
+        "sources": sources,
+        "activity_log": log
     }
 
 
@@ -131,14 +436,17 @@ def reader_node(state: ResearchState):
 
     processed_sources = []
 
-    for source in state["search_results"][:3]:
+    for source in state["search_results"][:5]:
 
         processed_sources.append(
             summarize_source(source)
         )
 
+    log = state.get("activity_log", []) + [{"agent": "Reader Agent", "action": f"Summarized {len(processed_sources)} sources"}]
+
     return {
-        "processed_sources": processed_sources
+        "processed_sources": processed_sources,
+        "activity_log": log
     }
 
 
@@ -148,34 +456,22 @@ def research_node(state: ResearchState):
 
     report = generate_research_summary(
         query=state["query"],
-        search_results=state["processed_sources"]
+        search_results=state["processed_sources"],
+        route=state.get("route", "WEB")
     )
 
+    log = state.get("activity_log", []) + [{"agent": "Research Agent", "action": "Generated draft report"}]
+
     return {
-        "report": report
+        "report": report,
+        "activity_log": log
     }
 
 
 def writer_node(state: ResearchState):
 
-    print(type(state.get("critic_report")))
-    print(state.get("critic_report"))
-
     critic_data = state.get("critic_report")
-
-    print("\nCRITIC DATA:\n")
-    print(critic_data)
-    print(type(critic_data))
-
     report_to_format = state["report"]
-    
-    report_to_format = state["report"]
-
-    print(type(report_to_format))
-    
-    if isinstance(report_to_format, str):
-        print(report_to_format[:500])
-
 
     formatted_report = format_report(
         report=report_to_format,
@@ -183,16 +479,34 @@ def writer_node(state: ResearchState):
         sources=state["sources"]
     )
 
+    # Calculate Research Quality Indicators
+    metrics = calculate_quality_metrics(formatted_report, state.get("sources", []))
+    
+    insights = state.get("insights", {})
+    insights["word_count"] = len(report_to_format.split())
+    insights["reference_count"] = metrics["references_used"]
+    insights["references_used"] = metrics["references_used"]
+    insights["unique_sources"] = metrics["unique_sources"]
+    insights["average_source_freshness"] = metrics["average_source_freshness"]
+    insights["citation_density"] = metrics["citation_density"]
+    insights["evidence_coverage"] = metrics["evidence_coverage"]
+    insights["evidence_panel"] = metrics["evidence_panel"]
+
     save_research(
         query=state["query"],
         route=state["route"],
-        report=formatted_report
+        report=formatted_report,
+        sources=state.get("sources", []),
+        insights=insights
     )
 
+    log = state.get("activity_log", []) + [{"agent": "Writer Agent", "action": "Generated final formatted report"}]
+
     return {
-    "formatted_report": formatted_report,
-    "insights": state.get("insights", {})
-}
+        "formatted_report": formatted_report,
+        "insights": insights,
+        "activity_log": log
+    }
 
 # -------------------------
 # RAG FLOW
@@ -209,9 +523,12 @@ def rag_node(state: ResearchState):
         chunks
     )
 
+    log = state.get("activity_log", []) + [{"agent": "RAG Agent", "action": f"Retrieved {len(chunks)} chunks & generated answer"}]
+
     return {
         "rag_chunks": chunks,
-        "rag_answer": answer
+        "rag_answer": answer,
+        "activity_log": log
     }
 
 
@@ -223,14 +540,31 @@ def rag_writer_node(state: ResearchState):
         sources=[]
     )
 
+    insights = {
+        "word_count": len(state["rag_answer"].split()),
+        "reference_count": 0,
+        "references_used": 0,
+        "unique_sources": 0,
+        "average_source_freshness": "N/A",
+        "citation_density": 0.0,
+        "evidence_coverage": 0.0,
+        "evidence_panel": []
+    }
+
     save_research(
         query=state["query"],
         route="RAG",
-        report=formatted_report
+        report=formatted_report,
+        sources=[],
+        insights=insights
     )
 
+    log = state.get("activity_log", []) + [{"agent": "Writer Agent", "action": "Generated final formatted report"}]
+
     return {
-        "formatted_report": formatted_report
+        "formatted_report": formatted_report,
+        "insights": insights,
+        "activity_log": log
     }
 
 
@@ -246,42 +580,98 @@ def hybrid_node(state: ResearchState):
     )
 
     combined_results = []
+    sources_list = []
 
     # web results
 
-    for result in web_results[:3]:
-
-        combined_results.append(
-            {
-                "title": result["title"],
-                "url": result["url"],
-                "content": result.get(
-                    "content",
-                    ""
-                )
-            }
-        )
+    for result in web_results[:5]:
+        item = {
+            "title": result["title"],
+            "url": result["url"],
+            "content": result.get("content", ""),
+            "raw_content": result.get("raw_content", "")
+        }
+        combined_results.append(item)
+        sources_list.append(item)
 
     # rag results
 
-    for chunk in rag_chunks:
+    for idx, chunk in enumerate(rag_chunks, start=1):
+        item = {
+            "title": f"Local Knowledge Base (Chunk {idx})",
+            "url": "RAG",
+            "content": chunk,
+            "raw_content": chunk
+        }
+        combined_results.append(item)
+        sources_list.append(item)
 
-        combined_results.append(
-            {
-                "title": "Local Knowledge Base",
-                "url": "RAG",
-                "content": chunk
-            }
-        )
+    route = "HYBRID"
+    if not rag_chunks:
+        route = "WEB"
+
+    log = state.get("activity_log", []) + [{"agent": "Hybrid Agent", "action": f"Combined {len(web_results[:5])} web sources and {len(rag_chunks)} local chunks"}]
 
     return {
         "processed_sources": combined_results,
-        "sources": [
-            result["url"]
-            for result in web_results[:3]
-        ]
+        "sources": sources_list,
+        "route": route,
+        "activity_log": log
     }
 
+
+# -------------------------
+# ARXIV FLOW
+# -------------------------
+
+def arxiv_node(state: ResearchState):
+    print("ARXIV NODE EXECUTED")
+    from agents.arxiv_agent import search_arxiv
+    query = state["query"]
+    
+    try:
+        results = search_arxiv(query)
+    except Exception as e:
+        print(f"arXiv search failed: {e}. Falling back to WEB route.")
+        results = []
+
+    if not results:
+        # Fall back to WEB route
+        log = state.get("activity_log", []) + [{"agent": "arXiv Agent", "action": "No arXiv papers found. Falling back to WEB route."}]
+        return {
+            "route": "WEB",
+            "activity_log": log
+        }
+
+    sources = []
+    processed_sources = []
+    for idx, paper in enumerate(results, start=1):
+        year = paper["published"][:4] if paper.get("published") else "Unknown"
+        authors_str = ", ".join(paper["authors"]) if paper.get("authors") else "Unknown"
+        item = {
+            "title": paper["title"],
+            "url": paper["url"],
+            "authors": authors_str,
+            "year": year,
+            "content": paper["summary"],
+            "raw_content": paper["summary"],
+            "source_type": "arxiv"
+        }
+        sources.append(item)
+        processed_sources.append(item)
+
+    log = state.get("activity_log", []) + [{"agent": "arXiv Agent", "action": f"Retrieved {len(sources)} academic papers"}]
+
+    return {
+        "sources": sources,
+        "processed_sources": processed_sources,
+        "activity_log": log
+    }
+
+def arxiv_decision(state: ResearchState):
+    if state["route"] == "WEB":
+        return "search"
+    return "research"
 
 # -------------------------
 # GRAPH
@@ -336,8 +726,32 @@ builder.add_node(
     critic_node
 )
 
+builder.add_node(
+    "ambiguity",
+    ambiguity_node
+)
+
+builder.add_node(
+    "arxiv",
+    arxiv_node
+)
+
 builder.set_entry_point(
-    "router"
+    "ambiguity"
+)
+
+def ambiguity_decision(state: ResearchState):
+    if state.get("needs_clarification", False):
+        return "end"
+    return "router"
+
+builder.add_conditional_edges(
+    "ambiguity",
+    ambiguity_decision,
+    {
+        "end": END,
+        "router": "router"
+    }
 )
 
 builder.add_conditional_edges(
@@ -346,7 +760,17 @@ builder.add_conditional_edges(
     {
         "search": "search",
         "rag": "rag",
-        "hybrid": "hybrid"
+        "hybrid": "hybrid",
+        "arxiv": "arxiv"
+    }
+)
+
+builder.add_conditional_edges(
+    "arxiv",
+    arxiv_decision,
+    {
+        "search": "search",
+        "research": "research"
     }
 )
 
