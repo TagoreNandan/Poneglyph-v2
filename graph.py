@@ -489,33 +489,72 @@ Do not include category labels or formatting. Output exactly 5 lines, one query 
             
         print(f"Generated image search queries: {queries}")
         
-        # 2. Retrieve candidate images (up to 10 unique URLs) via Tavily
+        # 2. Retrieve candidate images along with search result context in parallel
         client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
         seen_urls = set()
         
-        for query in queries[:5]:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        def run_single_search(q):
             try:
-                res = client.search(query=query, include_images=True)
-                img_list = res.get("images", [])
-                print(f"Tavily image search for '{query}' returned {len(img_list)} images")
-                for img in img_list[:3]:  # Take top 3 from each search query
+                res = client.search(query=q, include_images=True)
+                return q, res
+            except Exception as e:
+                print(f"Error fetching image for query '{q}': {e}")
+                return q, {}
+
+        futures = []
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            for query in queries[:5]:
+                futures.append(executor.submit(run_single_search, query))
+                
+        for fut in as_completed(futures):
+            query, res = fut.result()
+            results = res.get("results", [])
+            print(f"Tavily image search for '{query}' returned {len(results)} search results")
+            
+            # First, collect images associated with specific results (with context)
+            for r in results:
+                img_list = r.get("images", [])
+                for img in img_list:
                     if img and img.startswith("http") and img not in seen_urls:
                         seen_urls.add(img)
-                        candidates.append({"url": img, "query": query})
-            except Exception as e:
-                print(f"Error fetching image for query '{query}': {e}")
+                        candidates.append({
+                            "url": img,
+                            "query": query,
+                            "source_url": r.get("url"),
+                            "source_title": r.get("title", "Unknown Source"),
+                            "source_context": r.get("content", "")[:250]
+                        })
+            
+            # Second, collect any remaining general images that didn't map to a specific result
+            general_imgs = res.get("images", [])
+            for img in general_imgs:
+                if img and img.startswith("http") and img not in seen_urls:
+                    seen_urls.add(img)
+                    candidates.append({
+                        "url": img,
+                        "query": query,
+                        "source_url": "Unknown",
+                        "source_title": "Image Search Result",
+                        "source_context": "Found directly via image search query."
+                    })
                 
-        # Limit to top 10 candidates
-        candidates = candidates[:10]
+        # Limit to top 12 candidates for scoring
+        candidates = candidates[:12]
         if not candidates:
             return []
             
-        # 3. Score and deduplicate candidate images via Gemini
+        # 3. Score and deduplicate candidate images via Gemini using context metadata
         scoring_prompt = f"""
 We are generating a research report on the topic: "{topic}".
-We have retrieved the following candidate image URLs along with the search queries that found them.
+We have retrieved the following candidate images along with their search queries, source titles, source URLs, and context snippets.
 
-Evaluate and score each image on a scale from 0 to 10 based on its relevance, usefulness, and quality for the report.
+Evaluate and score each image on a scale from 0 to 10 based on its relevance, utility, and quality for the report.
+Calculate the relevance score using:
+1. Report Topic: Does the image's source title and snippet context align with the report topic?
+2. Image Title & Metadata: Does the page title and query indicate it's a high-quality relevant illustration (portraits of people, diagrams, timeline infographics)?
+3. Image Source Context: Evaluate the context snippet. Discard images from irrelevant, desktop setup screenshots, or low-quality contexts.
 
 Rules:
 1. Boost (+3 to +5): Diagrams, infographics, portraits/photos of key people, historical photographs, architecture images.
@@ -596,13 +635,14 @@ def writer_node(state: ResearchState):
     insights["evidence_coverage"] = metrics["evidence_coverage"]
     insights["evidence_panel"] = metrics["evidence_panel"]
 
-    save_research(
-        query=state["query"],
-        route=state["route"],
-        report=formatted_report,
-        sources=state.get("sources", []),
-        insights=insights
-    )
+    if not is_failed:
+        save_research(
+            query=state["query"],
+            route=state["route"],
+            report=formatted_report,
+            sources=state.get("sources", []),
+            insights=insights
+        )
 
     log = state.get("activity_log", []) + [{"agent": "Writer Agent", "action": "Generated final formatted report"}]
 
@@ -655,13 +695,19 @@ def rag_writer_node(state: ResearchState):
         "evidence_panel": []
     }
 
-    save_research(
-        query=state["query"],
-        route="RAG",
-        report=formatted_report,
-        sources=[],
-        insights=insights
+    is_failed = (
+        not state["rag_answer"] or
+        "failed" in state["rag_answer"].lower()[:100] or
+        "temporarily unavailable" in state["rag_answer"].lower()
     )
+    if not is_failed:
+        save_research(
+            query=state["query"],
+            route="RAG",
+            report=formatted_report,
+            sources=[],
+            insights=insights
+        )
 
     log = state.get("activity_log", []) + [{"agent": "Writer Agent", "action": "Generated final formatted report"}]
 

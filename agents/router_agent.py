@@ -4,11 +4,10 @@ def classify_query(query):
 
     query = query.lower()
 
-    # Use Gemini to classify the query type
     classification_prompt = f"""
 Classify the following query into exactly one of three categories:
-- ACADEMIC: If the query is a genuine academic or technical research query (e.g. machine learning, neural networks, computer vision, BERT paper, Transformer architecture).
-- GENERAL: If the query is about pop culture, movies, anime, news, fictional characters, general topics (e.g. Optimus Prime, Megatron, Autobots vs Decepticons, Naruto, One Piece, anime).
+- ACADEMIC: ONLY classify the query as ACADEMIC if it is a technical, scientific research query suited for the arXiv database (specifically: computer science, machine learning, deep learning, artificial intelligence, physics, mathematics, statistics, electrical engineering, quantitative biology, quantitative finance). Do NOT classify psychology, social sciences, medicine, psychiatry, human behavior, anger management, history, culture, cinema, art, geography, business, or literature topics as ACADEMIC, even if they contain formal or scientific-sounding language. Route all of those to GENERAL instead.
+- GENERAL: If the query is about pop culture, movies, cinema history, general history, psychology, human behavior, social sciences, anime, news, fictional characters, general trivia, geography, or sports (e.g. Optimus Prime, Megatron, Autobots vs Decepticons, Naruto, Growth of Indian cinema in the 20's, Anger management in Gen-Z).
 - AMBIGUOUS: If the query is vague, short, or unclear.
 
 Query: "{query}"
