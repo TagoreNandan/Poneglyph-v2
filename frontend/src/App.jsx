@@ -444,6 +444,24 @@ function App() {
     }, "");
   };
 
+  const handleNavClick = (nav) => {
+    setActiveNav(nav);
+    setActiveReport(null);
+    setActiveReportId(null);
+    setError(null);
+    window.history.pushState({
+      activeNav: nav,
+      activeReportId: null,
+      activeReport: null,
+      activeTopic: '',
+      route: null,
+      insights: null,
+      sources: [],
+      selectedCollection: null,
+      timestamp: ''
+    }, "");
+  };
+
   const handleChatSubmit = async (e) => {
     e.preventDefault();
     if (!chatInput.trim() || !activeReport) return;
@@ -584,6 +602,107 @@ function App() {
     if (route === 'WEB') return "Web registry insights and historical timelines.";
     if (route === 'RAG') return "Local database context and vector indexing.";
     return "Cached research insights and source logs.";
+  };
+
+  const getCleanedHistory = () => {
+    if (!history) return [];
+    
+    const seenTitles = new Set();
+    const cleaned = [];
+    
+    for (const item of history) {
+      if (!item || !item.title) continue;
+      
+      const titleLower = item.title.toLowerCase().trim();
+      
+      const isFailed = (
+        titleLower.includes("failed") ||
+        titleLower.includes("error") ||
+        titleLower.includes("temporarily unavailable") ||
+        titleLower.includes("no report was generated")
+      );
+      if (isFailed) continue;
+      
+      if (seenTitles.has(titleLower)) continue;
+      
+      seenTitles.add(titleLower);
+      cleaned.push(item);
+    }
+    
+    return cleaned.slice(0, 15);
+  };
+
+  const renderHistoryView = () => {
+    const cleaned = getCleanedHistory();
+    const filtered = cleaned.filter(item => 
+      item && item.title && item.title.toLowerCase().includes((historySearch || '').toLowerCase())
+    );
+
+    return (
+      <div className="history-view-container" style={{ animation: 'fadeIn 0.3s ease-out' }}>
+        <h1 style={{ fontSize: '28px', fontWeight: 800, marginBottom: '8px', letterSpacing: '-0.02em' }}>Research History</h1>
+        <p style={{ color: 'var(--on-surface-variant)', fontSize: '14px', marginBottom: '24px' }}>
+          Review and search all previously generated intelligence reports.
+        </p>
+
+        <input 
+          type="text" 
+          placeholder="Search history records..." 
+          value={historySearch}
+          onChange={e => setHistorySearch(e.target.value)}
+          style={{
+            width: '100%',
+            maxWidth: '480px',
+            background: 'var(--surface-container-lowest)',
+            border: '1px solid var(--outline)',
+            color: 'var(--on-background)',
+            padding: '12px 16px',
+            fontSize: '14px',
+            outline: 'none',
+            marginBottom: '32px',
+            transition: 'border-color 0.2s'
+          }}
+          className="history-search-input-main"
+        />
+
+        <div className="history-view-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {filtered.length === 0 ? (
+            <p style={{ fontStyle: 'italic', color: 'var(--on-surface-variant)', fontSize: '13px' }}>No reports found in history.</p>
+          ) : (
+            filtered.map(item => {
+              let dateStr = "";
+              if (item.timestamp) {
+                const parsedTime = item.timestamp.includes('T') ? item.timestamp : item.timestamp.replace(' ', 'T') + 'Z';
+                dateStr = new Date(parsedTime).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+              }
+              return (
+                <div 
+                  key={item.id} 
+                  className="history-view-row"
+                  onClick={() => handleSelectHistory(item.id)}
+                  style={{
+                    padding: '20px',
+                    border: '1px solid var(--outline)',
+                    background: 'var(--surface-container-low)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--on-background)' }}>{item.title}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Route: {item.route || 'WEB'}</span>
+                  </div>
+                  <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)' }}>{dateStr || "Recent"}</span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
   };
 
   const renderSettingsView = () => {
@@ -760,26 +879,26 @@ function App() {
         {/* Main Navigation Links */}
         <div className="nav-section">
           <button 
-            className={`nav-item ${(activeNav === 'archives' && !activeReport) ? 'active' : ''}`}
-            onClick={() => { setActiveNav('archives'); setActiveReport(null); setActiveReportId(null); setError(null); }}
+            className={`nav-item ${activeNav === 'history' ? 'active' : ''}`}
+            onClick={() => handleNavClick('history')}
           >
             <Activity size={15} /> History
           </button>
           <button 
             className={`nav-item ${activeNav === 'archives' ? 'active' : ''}`}
-            onClick={() => { setActiveNav('archives'); setActiveReport(null); setActiveReportId(null); setError(null); }}
+            onClick={() => handleNavClick('archives')}
           >
             <Archive size={15} /> Archives
           </button>
           <button 
             className={`nav-item ${activeNav === 'collections' ? 'active' : ''}`}
-            onClick={() => setActiveNav('collections')}
+            onClick={() => handleNavClick('collections')}
           >
             <Folder size={15} /> Collections
           </button>
           <button 
             className={`nav-item ${activeNav === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveNav('settings')}
+            onClick={() => handleNavClick('settings')}
           >
             <Settings size={15} /> Settings
           </button>
@@ -883,6 +1002,8 @@ function App() {
             renderSettingsView()
           ) : activeNav === 'collections' ? (
             renderCollectionsView()
+          ) : activeNav === 'history' ? (
+            renderHistoryView()
           ) : !activeReport ? (
             /* PONEGLYPH MAGAZINE HOME PAGE LAYOUT */
             <div className="home-container">
