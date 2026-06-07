@@ -167,6 +167,7 @@ function App() {
   // Navigation
   const [activeNav, setActiveNav] = useState('archives');
   const [selectedCollection, setSelectedCollection] = useState(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const [bypassClarification, setBypassClarification] = useState(() => {
     return localStorage.getItem('bypassClarification') === 'true';
@@ -1426,7 +1427,7 @@ function App() {
             <button className="new-search-btn" onClick={handleNewSearch}>
               New Search
             </button>
-            <div className="profile-btn" onClick={() => handleNavClick('settings')}>
+            <div className="profile-btn" onClick={() => setProfileOpen(true)}>
               <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
@@ -1528,6 +1529,100 @@ function App() {
           </button>
         </form>
       </div>
+
+      {/* PROFILE MODAL OVERLAY */}
+      {profileOpen && (
+        <div 
+          className="profile-modal-backdrop" 
+          onClick={() => setProfileOpen(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        >
+          <div 
+            className="profile-modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--surface-container-low)',
+              border: '1px solid var(--outline)',
+              width: '100%',
+              maxWidth: '380px',
+              padding: '28px',
+              position: 'relative',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)'
+            }}
+          >
+            <button 
+              onClick={() => setProfileOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'none',
+                border: 'none',
+                color: 'var(--on-surface-variant)',
+                cursor: 'pointer',
+                padding: '4px'
+              }}
+            >
+              <X size={18} />
+            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+              <div 
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  background: 'var(--primary-container)',
+                  color: 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '24px',
+                  fontWeight: 700,
+                  marginBottom: '16px',
+                  border: '1px solid var(--outline)'
+                }}
+              >
+                GR
+              </div>
+              <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--on-background)', marginBottom: '4px', fontFamily: 'Inter, sans-serif' }}>Guest Researcher</h2>
+              <p style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginBottom: '24px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Archival Access Role</p>
+              
+              <div 
+                style={{
+                  width: '100%',
+                  borderTop: '1px solid var(--outline)',
+                  paddingTop: '20px',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '16px'
+                }}
+              >
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--primary)' }}>{totalReports}</div>
+                  <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--on-surface-variant)', fontWeight: 700, marginTop: '4px', letterSpacing: '0.05em' }}>Total Reports</div>
+                </div>
+                <div style={{ textAlign: 'center', borderLeft: '1px solid var(--outline)' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--primary)' }}>5</div>
+                  <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--on-surface-variant)', fontWeight: 700, marginTop: '4px', letterSpacing: '0.05em' }}>Collections</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
