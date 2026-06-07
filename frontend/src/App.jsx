@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Search, Archive, Folder, Settings, Download, FileText, Activity, AlertCircle, ArrowRight, MessageSquare, Loader, X, ExternalLink, ChevronRight, HelpCircle, ShieldAlert } from 'lucide-react';
+import { Search, Archive, Folder, Settings, Download, FileText, Activity, AlertCircle, ArrowRight, MessageSquare, Loader, X, ExternalLink, ChevronRight, HelpCircle, ShieldAlert, Trash2 } from 'lucide-react';
 import { fetchHistory, fetchReport, generateResearch, sendChat, downloadPDF } from './api';
 import './index.css';
 
@@ -168,6 +168,8 @@ function App() {
   const [activeNav, setActiveNav] = useState('archives');
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [reportToDelete, setReportToDelete] = useState(null);
 
   const [bypassClarification, setBypassClarification] = useState(() => {
     return localStorage.getItem('bypassClarification') === 'true';
@@ -273,10 +275,25 @@ function App() {
   const loadHistory = async () => {
     try {
       const data = await fetchHistory();
-      setHistory(data ?? []);
+      const deletedIds = JSON.parse(localStorage.getItem('deletedReportIds') || '[]');
+      const filtered = (data ?? []).filter(item => item && !deletedIds.includes(item.id));
+      setHistory(filtered);
     } catch (err) {
       console.error(err);
       setHistory([]);
+    }
+  };
+
+  const handleDeleteReport = (id) => {
+    const deletedIds = JSON.parse(localStorage.getItem('deletedReportIds') || '[]');
+    if (!deletedIds.includes(id)) {
+      deletedIds.push(id);
+      localStorage.setItem('deletedReportIds', JSON.stringify(deletedIds));
+    }
+    setHistory(prev => prev.filter(item => item && item.id !== id));
+    if (activeReportId === id) {
+      setActiveReport(null);
+      setActiveReportId(null);
     }
   };
 
@@ -706,7 +723,7 @@ function App() {
 
         <div className="history-view-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filtered.length === 0 ? (
-            <p style={{ fontStyle: 'italic', color: 'var(--on-surface-variant)', fontSize: '13px' }}>No reports found in history.</p>
+            <p style={{ fontStyle: 'italic', color: 'var(--on-surface-variant)', fontSize: '13px' }}>No reports generated yet.</p>
           ) : (
             filtered.map(item => {
               let dateStr = "";
@@ -734,7 +751,32 @@ function App() {
                     <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--on-background)' }}>{item.title}</span>
                     <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Route: {item.route || 'WEB'}</span>
                   </div>
-                  <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)' }}>{dateStr || "Recent"}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)' }}>{dateStr || "Recent"}</span>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setReportToDelete(item);
+                        setDeleteConfirmOpen(true);
+                      }}
+                      className="delete-report-btn"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--on-surface-variant)',
+                        cursor: 'pointer',
+                        padding: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '4px',
+                        transition: 'all 0.2s'
+                      }}
+                      title="Delete report permanently"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
               );
             })
@@ -774,7 +816,7 @@ function App() {
           
           <div className="collection-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {filteredItems.length === 0 ? (
-              <p style={{ fontStyle: 'italic', color: 'var(--on-surface-variant)', fontSize: '13px' }}>No reports categorized in this folder yet.</p>
+              <p style={{ fontStyle: 'italic', color: 'var(--on-surface-variant)', fontSize: '13px' }}>No reports in this collection.</p>
             ) : (
               filteredItems.map(item => {
                 let dateStr = "";
@@ -801,7 +843,32 @@ function App() {
                     <div className="collection-item-info" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <span className="collection-item-title" style={{ fontWeight: 700, fontSize: '14px' }}>{item.title}</span>
                     </div>
-                    <span className="collection-item-date" style={{ fontSize: '11px', color: 'var(--on-surface-variant)' }}>{dateStr || "Recent"}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <span className="collection-item-date" style={{ fontSize: '11px', color: 'var(--on-surface-variant)' }}>{dateStr || "Recent"}</span>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReportToDelete(item);
+                          setDeleteConfirmOpen(true);
+                        }}
+                        className="delete-report-btn"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--on-surface-variant)',
+                          cursor: 'pointer',
+                          padding: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '4px',
+                          transition: 'all 0.2s'
+                        }}
+                        title="Delete report permanently"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 );
               })
@@ -1618,6 +1685,122 @@ function App() {
                   <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--primary)' }}>5</div>
                   <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--on-surface-variant)', fontWeight: 700, marginTop: '4px', letterSpacing: '0.05em' }}>Collections</div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* DELETE CONFIRMATION MODAL OVERLAY */}
+      {deleteConfirmOpen && (
+        <div 
+          className="profile-modal-backdrop" 
+          onClick={() => {
+            setDeleteConfirmOpen(false);
+            setReportToDelete(null);
+          }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        >
+          <div 
+            className="profile-modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--surface-container-low)',
+              border: '1px solid var(--outline)',
+              width: '100%',
+              maxWidth: '400px',
+              padding: '28px',
+              position: 'relative',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)'
+            }}
+          >
+            <button 
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+                setReportToDelete(null);
+              }}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'none',
+                border: 'none',
+                color: 'var(--on-surface-variant)',
+                cursor: 'pointer',
+                padding: '4px'
+              }}
+            >
+              <X size={18} />
+            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--on-background)', fontFamily: 'Inter, sans-serif', margin: 0 }}>Delete Report</h3>
+              <p style={{ fontSize: '14px', color: 'var(--on-surface-variant)', margin: 0, lineHeight: 1.6 }}>
+                Delete this report permanently? <br />
+                <span style={{ fontWeight: 600, color: 'var(--error-color, #ef4444)' }}>This action cannot be undone.</span>
+              </p>
+              
+              {reportToDelete && (
+                <div style={{ padding: '12px', background: 'var(--surface-container-lowest)', border: '1px solid var(--outline)', fontSize: '13px', fontWeight: 600, color: 'var(--on-background)' }}>
+                  {reportToDelete.title}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                <button 
+                  onClick={() => {
+                    setDeleteConfirmOpen(false);
+                    setReportToDelete(null);
+                  }}
+                  className="back-collection-btn"
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid var(--outline)',
+                    color: 'var(--on-background)',
+                    padding: '8px 16px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    if (reportToDelete) {
+                      handleDeleteReport(reportToDelete.id);
+                    }
+                    setDeleteConfirmOpen(false);
+                    setReportToDelete(null);
+                  }}
+                  className="back-collection-btn"
+                  style={{
+                    background: 'var(--error, #ef4444)',
+                    borderColor: 'var(--error, #ef4444)',
+                    color: '#ffffff',
+                    padding: '8px 16px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Delete Permanently
+                </button>
               </div>
             </div>
           </div>
