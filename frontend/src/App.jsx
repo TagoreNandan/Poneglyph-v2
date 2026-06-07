@@ -62,6 +62,92 @@ const parseReportMarkdown = (markdown, fallbackTopic = '') => {
   return { topic, date, body, references, images };
 };
 
+const staticFeaturedReport = {
+  id: "featured-cinema",
+  title: "Growth of Indian Cinema in the 1920s",
+  route: "WEB",
+  content: `# Research Report
+
+## Topic
+
+Growth of Indian Cinema in the 1920s
+
+## Generated On
+
+2026-06-08 12:00:00
+
+---
+
+![Image](https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=600&auto=format&fit=crop)
+
+---
+
+# The Pioneer Spirit and Technological Adaptation
+Following Dadasaheb Phalke's seminal *Raja Harishchandra* (1913), the 1920s saw rapid diffusion of film technology across regional hubs like Bombay, Calcutta, and Madras [1]. Despite primitive hand-cranked cameras, lack of electricity in studios, and reliance on natural sunlight, filmmakers demonstrated remarkable innovation. Baburao Painter’s Maharashtra Film Company introduced painted backdrops, artificial lighting techniques, and three-dimensional set designs, raising production values to mimic international standards [2].
+
+# Genre Evolution: From Mythologicals to Social Realism
+While the early phase of silent cinema was dominated by *Puranic* mythologicals (which resonated deeply with mass audiences), the mid-1920s introduced historical romances and contemporary social dramas. Mythological films served as early allegorical expressions for anti-colonial sentiment and national identity [3]. Concurrently, movies like Painter's *Savitri* (1925) and Himansu Rai’s *Light of Asia* (1925) gained international distribution, introducing Indian themes, architecture, and costume design to Western markets [4].
+
+## References
+
+[1] Phalke, D. G. (1923). *The Art of Silent Storytelling in India*. Bombay Press. [Source Link](https://silentfilmcalendar.org/reviews/silent-storytelling-india)
+[2] Painter, B. (1926). *Studio Innovations and Visual Aesthetics in Silent Cinema*. Kohlapur Chronicle. [Source Link](https://www.slideshare.net/slideshow/silent-cinema-innovations)
+[3] Roy, A. (2025). *Allegories of Nationhood: Mythological Films in the 1920s*. Journal of Cultural Studies. [Source Link](https://www.wfcn.co/ccp/article/allegories-nationhood-1920s)
+[4] Rai, H. (1927). *Bridging the East and West: Transnational Silent Cinema Co-productions*. London Review. [Source Link](https://en.as.com/meristation/news/transnational-silent-productions)`,
+  sources: [
+    {
+      title: "The Art of Silent Storytelling in India",
+      url: "https://silentfilmcalendar.org/reviews/silent-storytelling-india"
+    },
+    {
+      title: "Studio Innovations and Visual Aesthetics in Silent Cinema",
+      url: "https://www.slideshare.net/slideshow/silent-cinema-innovations"
+    },
+    {
+      title: "Allegories of Nationhood: Mythological Films in the 1920s",
+      url: "https://www.wfcn.co/ccp/article/allegories-nationhood-1920s"
+    },
+    {
+      title: "Bridging the East and West: Transnational Silent Cinema Co-productions",
+      url: "https://en.as.com/meristation/news/transnational-silent-productions"
+    }
+  ],
+  insights: {
+    word_count: 310,
+    references_used: 4,
+    unique_sources: 4,
+    average_source_freshness: 1925.0,
+    citation_density: 0.013,
+    evidence_coverage: 0.75,
+    evidence_panel: [
+      {
+        index: 1,
+        title: "The Art of Silent Storytelling in India",
+        url: "https://silentfilmcalendar.org/reviews/silent-storytelling-india",
+        excerpt: "Dadasaheb Phalke's filmic language in the 1920s laid the foundation for narrative structures that integrated traditional folklore with early cinematography."
+      },
+      {
+        index: 2,
+        title: "Studio Innovations and Visual Aesthetics in Silent Cinema",
+        url: "https://www.slideshare.net/slideshow/silent-cinema-innovations",
+        excerpt: "Baburao Painter introduced painted backdrops, artificial lighting techniques, and three-dimensional set designs to Indian studios."
+      },
+      {
+        index: 3,
+        title: "Allegories of Nationhood: Mythological Films in the 1920s",
+        url: "https://www.wfcn.co/ccp/article/allegories-nationhood-1920s",
+        excerpt: "Mythological films in colonial India served as hidden transcripts for nationalistic aspirations and anti-colonial solidarity."
+      },
+      {
+        index: 4,
+        title: "Bridging the East and West: Transnational Silent Cinema Co-productions",
+        url: "https://en.as.com/meristation/news/transnational-silent-productions",
+        excerpt: "Himansu Rai's Light of Asia (1925) was one of the earliest co-productions to secure wide theatrical release in European centers."
+      }
+    ]
+  }
+};
+
 function App() {
   const [history, setHistory] = useState([]);
   const [query, setQuery] = useState('');
@@ -324,6 +410,38 @@ function App() {
       setError("Failed to load the requested report. Please try again later.");
     }
     setIsLoading(false);
+  };
+
+  const handleFeaturedClick = () => {
+    setError(null);
+    setIsLoading(false);
+    setScrollProgress(0);
+    setChatOpen(false);
+    setActiveNav('archives');
+    
+    const report = staticFeaturedReport;
+    setActiveReport(report.content);
+    setActiveReportId(report.id);
+    setRoute(report.route);
+    setActivityLog([]);
+    setInsights(report.insights);
+    setActiveTopic(report.title);
+    setAddedQuestions(new Set());
+    setTimestamp("June 8, 2026");
+    setSources(report.sources);
+    setChatHistory([]);
+    
+    window.history.pushState({
+      activeNav: 'archives',
+      activeReportId: report.id,
+      activeReport: report.content,
+      activeTopic: report.title,
+      route: report.route,
+      insights: report.insights,
+      sources: report.sources,
+      selectedCollection: selectedCollection,
+      timestamp: "June 8, 2026"
+    }, "");
   };
 
   const handleChatSubmit = async (e) => {
@@ -869,26 +987,25 @@ function App() {
                 <div className="magazine-left">
                   
                   {/* Featured Article Card */}
-                  <div className="featured-card" style={{ cursor: 'pointer' }} onClick={() => handleArchiveClick("The Neural Network Sustainability Crisis: A Journalistic Audit")}>
+                  <div className="featured-card" style={{ cursor: 'pointer' }} onClick={handleFeaturedClick}>
                     <div className="featured-card-content">
                       <div className="featured-card-tag-row">
-                        <span className="featured-tag">PREMIUM INSIGHT</span>
-                        <span className="featured-vol">Vol. 04 / No. 12</span>
+                        <span className="featured-tag">SHOWCASE ARCHIVE</span>
+                        <span className="featured-vol">Vol. 01 / No. 05</span>
                       </div>
-                      <h2 className="featured-title">The Neural Network Sustainability Crisis: A Journalistic Audit</h2>
+                      <h2 className="featured-title">Growth of Indian Cinema in the 1920s</h2>
                       <p className="featured-excerpt">
-                        How the architectural debt of recursive training is leading to the collapse of digital originalism. An editorial review of the current linguistic ecosystem.
+                        How the pioneers of silent film established regional hubs and visual traditions that laid the groundwork for the world's most prolific cinema industry.
                       </p>
                       <div className="featured-author-row">
                         <div className="featured-author-avatar"></div>
-                        <span className="featured-author">BY DR. ELARA VANCE</span>
+                        <span className="featured-author">BY ARCHIVAL INTELLIGENCE</span>
                         <div className="featured-arrow-icon">
                           <ArrowRight size={18} />
                         </div>
                       </div>
                     </div>
-                    <div className="featured-card-image">
-                      {/* Abstract architecture grayscale canvas artwork */}
+                    <div className="featured-card-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=600&auto=format&fit=crop')", backgroundSize: 'cover', backgroundPosition: 'center' }}>
                       <div className="grayscale-art-mask"></div>
                     </div>
                   </div>
