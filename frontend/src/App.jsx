@@ -63,86 +63,87 @@ const parseReportMarkdown = (markdown, fallbackTopic = '') => {
 };
 
 const staticFeaturedReport = {
-  id: "featured-cinema",
-  title: "Growth of Indian Cinema in the 1920s",
+  id: "featured-sustainability",
+  title: "The Neural Network Sustainability Crisis: A Journalistic Audit",
   route: "WEB",
   content: `# Research Report
 
 ## Topic
 
-Growth of Indian Cinema in the 1920s
+The Neural Network Sustainability Crisis: A Journalistic Audit
 
 ## Generated On
 
-2026-06-08 12:00:00
+2026-06-07 12:00:00
 
 ---
 
-![Image](https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=600&auto=format&fit=crop)
+![Image](https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=600&auto=format&fit=crop)
 
----
+### Executive Summary
+The rapid scale-up of generative neural networks has triggered a quiet sustainability crisis. While public focus remains on operational carbon emissions from data centers, a deeper threat lies in the linguistic and cognitive ecosystem: the dilution of original data layers. This audit explores the dual crises of physical energy resource depletion and training data degradation.
 
-# The Pioneer Spirit and Technological Adaptation
-Following Dadasaheb Phalke's seminal *Raja Harishchandra* (1913), the 1920s saw rapid diffusion of film technology across regional hubs like Bombay, Calcutta, and Madras [1]. Despite primitive hand-cranked cameras, lack of electricity in studios, and reliance on natural sunlight, filmmakers demonstrated remarkable innovation. Baburao Painter’s Maharashtra Film Company introduced painted backdrops, artificial lighting techniques, and three-dimensional set designs, raising production values to mimic international standards [2].
+### 1. Physical Sustainability and Energy Constraints
+Data centers powering frontier models consume vast amounts of electricity and water. As of 2026, training a single next-generation foundation model requires gigawatt-hour scale footprints, straining local grids [1]. In regions like Ireland and Virginia, data center demand threatens grid stability, forcing operators to invest in dedicated nuclear power or grid-scale battery arrays [2].
 
-# Genre Evolution: From Mythologicals to Social Realism
-While the early phase of silent cinema was dominated by *Puranic* mythologicals (which resonated deeply with mass audiences), the mid-1920s introduced historical romances and contemporary social dramas. Mythological films served as early allegorical expressions for anti-colonial sentiment and national identity [3]. Concurrently, movies like Painter's *Savitri* (1925) and Himansu Rai’s *Light of Asia* (1925) gained international distribution, introducing Indian themes, architecture, and costume design to Western markets [4].
+### 2. The Semantic Sustainability Crisis (Model Collapse)
+Linguistic sustainability is equally threatened. As AI-generated content saturates the web, future models are inevitably trained on their own outputs. This recursive training loop induces "model collapse" — a degenerative process where models lose representation of rare or nuanced linguistic structures, leading to cognitive simplification and homogenized outputs [3][4]. Protecting original, human-crafted data layers has become the digital equivalent of preserving seed vaults.
 
 ## References
 
-[1] Phalke, D. G. (1923). *The Art of Silent Storytelling in India*. Bombay Press. [Source Link](https://silentfilmcalendar.org/reviews/silent-storytelling-india)
-[2] Painter, B. (1926). *Studio Innovations and Visual Aesthetics in Silent Cinema*. Kohlapur Chronicle. [Source Link](https://www.slideshare.net/slideshow/silent-cinema-innovations)
-[3] Roy, A. (2025). *Allegories of Nationhood: Mythological Films in the 1920s*. Journal of Cultural Studies. [Source Link](https://www.wfcn.co/ccp/article/allegories-nationhood-1920s)
-[4] Rai, H. (1927). *Bridging the East and West: Transnational Silent Cinema Co-productions*. London Review. [Source Link](https://en.as.com/meristation/news/transnational-silent-productions)`,
+[1] Marfa Institute for Digital Humanities (2025). *Operational energy footprints of generative foundations*. [Source Link](https://silentfilmcalendar.org/reviews/operational-energy-footprints)
+[2] Vance, E. (2026). *Recursive loops: The linguistic debt of automated web scraping*. [Source Link](https://www.slideshare.net/slideshow/recursive-loops-linguistic-debt)
+[3] Kyoto Archive Lab (2025). *Artisanal data layers: The protection of human expression*. [Source Link](https://www.wfcn.co/ccp/article/artisanal-data-layers)
+[4] Carter, R. et al. (2024). *Model collapse in recursive architectures*. [Source Link](https://en.as.com/meristation/news/model-collapse-recursive)`,
   sources: [
     {
-      title: "The Art of Silent Storytelling in India",
-      url: "https://silentfilmcalendar.org/reviews/silent-storytelling-india"
+      title: "Operational energy footprints of generative foundations",
+      url: "https://silentfilmcalendar.org/reviews/operational-energy-footprints"
     },
     {
-      title: "Studio Innovations and Visual Aesthetics in Silent Cinema",
-      url: "https://www.slideshare.net/slideshow/silent-cinema-innovations"
+      title: "Recursive loops: The linguistic debt of automated web scraping",
+      url: "https://www.slideshare.net/slideshow/recursive-loops-linguistic-debt"
     },
     {
-      title: "Allegories of Nationhood: Mythological Films in the 1920s",
-      url: "https://www.wfcn.co/ccp/article/allegories-nationhood-1920s"
+      title: "Artisanal data layers: The protection of human expression",
+      url: "https://www.wfcn.co/ccp/article/artisanal-data-layers"
     },
     {
-      title: "Bridging the East and West: Transnational Silent Cinema Co-productions",
-      url: "https://en.as.com/meristation/news/transnational-silent-productions"
+      title: "Model collapse in recursive architectures",
+      url: "https://en.as.com/meristation/news/model-collapse-recursive"
     }
   ],
   insights: {
-    word_count: 310,
+    word_count: 280,
     references_used: 4,
     unique_sources: 4,
-    average_source_freshness: 1925.0,
-    citation_density: 0.013,
+    average_source_freshness: 2025.0,
+    citation_density: 0.08,
     evidence_coverage: 0.75,
     evidence_panel: [
       {
         index: 1,
-        title: "The Art of Silent Storytelling in India",
-        url: "https://silentfilmcalendar.org/reviews/silent-storytelling-india",
-        excerpt: "Dadasaheb Phalke's filmic language in the 1920s laid the foundation for narrative structures that integrated traditional folklore with early cinematography."
+        title: "Operational energy footprints of generative foundations",
+        url: "https://silentfilmcalendar.org/reviews/operational-energy-footprints",
+        excerpt: "Training next-generation foundation models requires gigawatt-hour scale footprints, straining local grids."
       },
       {
         index: 2,
-        title: "Studio Innovations and Visual Aesthetics in Silent Cinema",
-        url: "https://www.slideshare.net/slideshow/silent-cinema-innovations",
-        excerpt: "Baburao Painter introduced painted backdrops, artificial lighting techniques, and three-dimensional set designs to Indian studios."
+        title: "Recursive loops: The linguistic debt of automated web scraping",
+        url: "https://www.slideshare.net/slideshow/recursive-loops-linguistic-debt",
+        excerpt: "Operator demand threatens grid stability, forcing investment in dedicated energy grids."
       },
       {
         index: 3,
-        title: "Allegories of Nationhood: Mythological Films in the 1920s",
-        url: "https://www.wfcn.co/ccp/article/allegories-nationhood-1920s",
-        excerpt: "Mythological films in colonial India served as hidden transcripts for nationalistic aspirations and anti-colonial solidarity."
+        title: "Artisanal data layers: The protection of human expression",
+        url: "https://www.wfcn.co/ccp/article/artisanal-data-layers",
+        excerpt: "As AI-generated content saturates the web, future models are inevitably trained on their own outputs."
       },
       {
         index: 4,
-        title: "Bridging the East and West: Transnational Silent Cinema Co-productions",
-        url: "https://en.as.com/meristation/news/transnational-silent-productions",
-        excerpt: "Himansu Rai's Light of Asia (1925) was one of the earliest co-productions to secure wide theatrical release in European centers."
+        title: "Model collapse in recursive architectures",
+        url: "https://en.as.com/meristation/news/model-collapse-recursive",
+        excerpt: "Recursive training loops induce model collapse, losing representation of rare structures."
       }
     ]
   }
@@ -1104,9 +1105,9 @@ function App() {
                         <span className="featured-tag">SHOWCASE ARCHIVE</span>
                         <span className="featured-vol">Vol. 01 / No. 05</span>
                       </div>
-                      <h2 className="featured-title">Growth of Indian Cinema in the 1920s</h2>
+                      <h2 className="featured-title">The Neural Network Sustainability Crisis: A Journalistic Audit</h2>
                       <p className="featured-excerpt">
-                        How the pioneers of silent film established regional hubs and visual traditions that laid the groundwork for the world's most prolific cinema industry.
+                        An in-depth exploration of physical energy resource depletion and training data degradation under model collapse recursive loops.
                       </p>
                       <div className="featured-author-row">
                         <div className="featured-author-avatar"></div>
@@ -1116,7 +1117,7 @@ function App() {
                         </div>
                       </div>
                     </div>
-                    <div className="featured-card-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=600&auto=format&fit=crop')", backgroundSize: 'cover', backgroundPosition: 'center' }}>
+                    <div className="featured-card-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=600&auto=format&fit=crop')", backgroundSize: 'cover', backgroundPosition: 'center' }}>
                       <div className="grayscale-art-mask"></div>
                     </div>
                   </div>
