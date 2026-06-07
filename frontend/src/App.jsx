@@ -743,34 +743,6 @@ function App() {
     );
   };
 
-  const renderSettingsView = () => {
-    return (
-      <div className="settings-container">
-        <h1>Archival Settings</h1>
-        <p className="settings-subtitle">Manage research preferences and workflow options.</p>
-        
-        <div className="settings-grid">
-          <div className="settings-card">
-            <h3>Workflow Configuration</h3>
-            <div className="settings-form-group switch-group" style={{ marginTop: '16px' }}>
-              <label className="switch-label" htmlFor="bypass-toggle" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  id="bypass-toggle"
-                  checked={bypassClarification} 
-                  onChange={(e) => handleBypassToggle(e.target.checked)} 
-                />
-                <span className="switch-text" style={{ fontWeight: 600 }}>Bypass Clarification Prompts</span>
-              </label>
-              <p className="setting-desc" style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginTop: '8px' }}>
-                Bypass ambiguity/clarification checks and auto-generate reports directly without asking for clarification.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const renderCollectionsView = () => {
     const categories = [
@@ -1374,12 +1346,6 @@ function App() {
           >
             <Folder size={15} /> Collections
           </button>
-          <button 
-            className={`nav-item ${activeNav === 'settings' ? 'active' : ''}`}
-            onClick={() => handleNavClick('settings')}
-          >
-            <Settings size={15} /> Settings
-          </button>
         </div>
 
         {/* Archives/History selection list */}
@@ -1478,8 +1444,6 @@ function App() {
             </div>
           ) : activeReport ? (
             renderReportView()
-          ) : activeNav === 'settings' ? (
-            renderSettingsView()
           ) : activeNav === 'collections' ? (
             renderCollectionsView()
           ) : activeNav === 'history' ? (
