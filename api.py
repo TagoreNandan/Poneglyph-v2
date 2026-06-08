@@ -16,7 +16,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
 
-app = FastAPI(title="Poneglyph Backend API")
+app = FastAPI(title="ResearchPilot AI Backend API")
 
 # Initialize database and prepopulate baseline reports
 init_db()
@@ -316,7 +316,7 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     content.append(Paragraph("RESEARCH REPORT", title_style))
-    content.append(Paragraph(f"Generated on: {timestamp} | Platform: Poneglyph", meta_style))
+    content.append(Paragraph(f"Generated on: {timestamp} | Platform: ResearchPilot AI", meta_style))
     content.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#E5E7EB"), spaceAfter=15))
     
     lines = text.split("\n")
