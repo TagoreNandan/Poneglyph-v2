@@ -59,6 +59,10 @@ const parseReportMarkdown = (markdown, fallbackTopic = '') => {
   // Strip leading headers like "# Research Report" from body if present
   body = body.replace(/^#\s+Research\s+Report\s*/i, '').trim();
 
+  if (images.length === 0) {
+    images.push("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop");
+  }
+
   return { topic, date, body, references, images };
 };
 
@@ -149,6 +153,20 @@ Linguistic sustainability is equally threatened. As AI-generated content saturat
   }
 };
 
+const extractExcerpt = (body) => {
+  if (!body) return '';
+  const summaryMatch = body.match(/(?:###?\s*Executive\s+Summary|###?\s*Summary)[\r\n]+([\s\S]+?)(?=[\r\n]+###?|$)/i);
+  if (summaryMatch && summaryMatch[1]) {
+    return summaryMatch[1].trim().replace(/\s+/g, ' ').slice(0, 160) + '...';
+  }
+  const paragraphs = body.split(/\n\s*\n/).map(p => p.trim()).filter(p => p && !p.startsWith('#') && !p.startsWith('!') && !p.startsWith('-'));
+  if (paragraphs.length > 0) {
+    const text = paragraphs[0].replace(/[*_`#]/g, '').replace(/\[\d+\]/g, '').replace(/\s+/g, ' ');
+    return text.slice(0, 160) + (text.length > 160 ? '...' : '');
+  }
+  return '';
+};
+
 function App() {
   const [history, setHistory] = useState([]);
   const [query, setQuery] = useState('');
@@ -170,6 +188,20 @@ function App() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [reportToDelete, setReportToDelete] = useState(null);
+
+  // Showcase Archive promotion states
+  const [showcaseReportId, setShowcaseReportId] = useState(() => {
+    return localStorage.getItem('showcaseReportId') || 'featured-sustainability';
+  });
+  const [showcaseTitle, setShowcaseTitle] = useState(() => {
+    return localStorage.getItem('showcaseTitle') || "The Neural Network Sustainability Crisis: A Journalistic Audit";
+  });
+  const [showcaseExcerpt, setShowcaseExcerpt] = useState(() => {
+    return localStorage.getItem('showcaseExcerpt') || "An in-depth exploration of physical energy resource depletion and training data degradation under model collapse recursive loops.";
+  });
+  const [showcaseImage, setShowcaseImage] = useState(() => {
+    return localStorage.getItem('showcaseImage') || "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=600&auto=format&fit=crop";
+  });
 
   const [bypassClarification, setBypassClarification] = useState(() => {
     return localStorage.getItem('bypassClarification') === 'true';
@@ -295,6 +327,36 @@ function App() {
       setActiveReport(null);
       setActiveReportId(null);
     }
+    if (showcaseReportId === id) {
+      setShowcaseReportId('featured-sustainability');
+      setShowcaseTitle("The Neural Network Sustainability Crisis: A Journalistic Audit");
+      setShowcaseExcerpt("An in-depth exploration of physical energy resource depletion and training data degradation under model collapse recursive loops.");
+      setShowcaseImage("https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=600&auto=format&fit=crop");
+      
+      localStorage.setItem('showcaseReportId', 'featured-sustainability');
+      localStorage.setItem('showcaseTitle', "The Neural Network Sustainability Crisis: A Journalistic Audit");
+      localStorage.setItem('showcaseExcerpt', "An in-depth exploration of physical energy resource depletion and training data degradation under model collapse recursive loops.");
+      localStorage.setItem('showcaseImage', "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=600&auto=format&fit=crop");
+    }
+  };
+
+  const handleSetShowcase = () => {
+    if (!activeReportId) return;
+    const currentExcerpt = extractExcerpt(reportData.body);
+    const currentImg = (reportData.images && reportData.images.length > 0) 
+      ? reportData.images[0] 
+      : "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop";
+    const currentTitle = reportData.topic || activeTopic;
+
+    setShowcaseReportId(activeReportId);
+    setShowcaseTitle(currentTitle);
+    setShowcaseExcerpt(currentExcerpt);
+    setShowcaseImage(currentImg);
+
+    localStorage.setItem('showcaseReportId', activeReportId);
+    localStorage.setItem('showcaseTitle', currentTitle);
+    localStorage.setItem('showcaseExcerpt', currentExcerpt);
+    localStorage.setItem('showcaseImage', currentImg);
   };
 
   const handleScroll = (e) => {
@@ -438,29 +500,33 @@ function App() {
     setChatOpen(false);
     setActiveNav('archives');
     
-    const report = staticFeaturedReport;
-    setActiveReport(report.content);
-    setActiveReportId(report.id);
-    setRoute(report.route);
-    setActivityLog([]);
-    setInsights(report.insights);
-    setActiveTopic(report.title);
-    setAddedQuestions(new Set());
-    setTimestamp("June 8, 2026");
-    setSources(report.sources);
-    setChatHistory([]);
-    
-    window.history.pushState({
-      activeNav: 'archives',
-      activeReportId: report.id,
-      activeReport: report.content,
-      activeTopic: report.title,
-      route: report.route,
-      insights: report.insights,
-      sources: report.sources,
-      selectedCollection: selectedCollection,
-      timestamp: "June 8, 2026"
-    }, "");
+    if (showcaseReportId === 'featured-sustainability') {
+      const report = staticFeaturedReport;
+      setActiveReport(report.content);
+      setActiveReportId(report.id);
+      setRoute(report.route);
+      setActivityLog([]);
+      setInsights(report.insights);
+      setActiveTopic(report.title);
+      setAddedQuestions(new Set());
+      setTimestamp("June 8, 2026");
+      setSources(report.sources);
+      setChatHistory([]);
+      
+      window.history.pushState({
+        activeNav: 'archives',
+        activeReportId: report.id,
+        activeReport: report.content,
+        activeTopic: report.title,
+        route: report.route,
+        insights: report.insights,
+        sources: report.sources,
+        selectedCollection: selectedCollection,
+        timestamp: "June 8, 2026"
+      }, "");
+    } else {
+      handleSelectHistory(showcaseReportId);
+    }
   };
 
   const handleNavClick = (nav) => {
@@ -934,7 +1000,7 @@ function App() {
                     ref={searchInputRef}
                     type="text" 
                     className="search-input-underlined" 
-                    placeholder="Inquire about the future..." 
+                    placeholder="Investigate any topic..." 
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     autoFocus
@@ -1027,20 +1093,21 @@ function App() {
                         <span className="featured-tag">SHOWCASE ARCHIVE</span>
                         <span className="featured-vol">Vol. 01 / No. 05</span>
                       </div>
-                      <h2 className="featured-title">The Neural Network Sustainability Crisis: A Journalistic Audit</h2>
+                      <h2 className="featured-title">{showcaseTitle}</h2>
                       <p className="featured-excerpt">
-                        An in-depth exploration of physical energy resource depletion and training data degradation under model collapse recursive loops.
+                        {showcaseExcerpt}
                       </p>
-                      <div className="featured-author-row">
-                        <div className="featured-author-avatar"></div>
-                        <span className="featured-author">BY ARCHIVAL INTELLIGENCE</span>
-                        <div className="featured-arrow-icon">
-                          <ArrowRight size={18} />
-                        </div>
-                      </div>
                     </div>
-                    <div className="featured-card-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=600&auto=format&fit=crop')", backgroundSize: 'cover', backgroundPosition: 'center' }}>
-                      <div className="grayscale-art-mask"></div>
+                    <div className="featured-card-image">
+                      <img 
+                        src={showcaseImage} 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} 
+                        alt="Showcase Cover" 
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop";
+                        }}
+                      />
                     </div>
                   </div>
 
@@ -1178,6 +1245,10 @@ function App() {
                     src={reportData.images[0]} 
                     className="report-hero-image" 
                     alt="Research Hero Illustration" 
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop";
+                    }}
                   />
                 )}
 
@@ -1220,6 +1291,10 @@ function App() {
                         src={imgUrl} 
                         className="report-gallery-image" 
                         alt={`Additional research evidence ${i + 1}`} 
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop";
+                        }}
                       />
                     ))}
                   </div>
@@ -1285,6 +1360,13 @@ function App() {
                     onClick={() => setChatOpen(true)}
                   >
                     <MessageSquare size={16} /> Open Chat Assistant
+                  </button>
+                  <button 
+                    className="showcase-select-btn"
+                    onClick={handleSetShowcase}
+                    disabled={showcaseReportId === activeReportId}
+                  >
+                    <Archive size={16} /> {showcaseReportId === activeReportId ? '✓ Current Showcase' : 'Set as Showcase Archive'}
                   </button>
                 </div>
 

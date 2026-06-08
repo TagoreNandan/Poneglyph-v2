@@ -48,6 +48,7 @@ class PDFRequest(BaseModel):
     chat_history: List[Dict[str, str]] = []
 
 def download_image_flowable(url: str) -> Any:
+    fallback_url = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop"
     try:
         import requests
         import urllib3
@@ -59,6 +60,10 @@ def download_image_flowable(url: str) -> Any:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         print(f"Downloading image for PDF: {url}")
         
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        
         pil_img = None
         if url.startswith("data:image/"):
             # Handle inline base64 image data URLs
@@ -68,18 +73,27 @@ def download_image_flowable(url: str) -> Any:
                 pil_img = PILImage.open(BytesIO(data))
             except Exception as b64_err:
                 print(f"Failed to decode base64 image: {b64_err}")
-                return None
         else:
             # Handle protocol-relative URLs
             if url.startswith("//"):
                 url = "https:" + url
                 
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-            resp = requests.get(url, headers=headers, verify=False, timeout=8)
-            if resp.status_code == 200:
-                pil_img = PILImage.open(BytesIO(resp.content))
+            try:
+                resp = requests.get(url, headers=headers, verify=False, timeout=8)
+                if resp.status_code == 200:
+                    pil_img = PILImage.open(BytesIO(resp.content))
+            except Exception as download_err:
+                print(f"Failed to download primary image {url}: {download_err}")
+
+        # If primary image failed, load fallback image
+        if not pil_img:
+            print(f"Primary image failed, loading fallback image for PDF: {fallback_url}")
+            try:
+                resp = requests.get(fallback_url, headers=headers, verify=False, timeout=8)
+                if resp.status_code == 200:
+                    pil_img = PILImage.open(BytesIO(resp.content))
+            except Exception as fb_err:
+                print(f"Failed to download fallback image: {fb_err}")
                 
         if pil_img:
             if pil_img.mode not in ("RGB", "RGBA"):
@@ -117,6 +131,44 @@ def download_image_flowable(url: str) -> Any:
             return t
     except Exception as e:
         print(f"Failed to download image flowable for {url}: {e}")
+        # Try loading fallback absolute safety
+        try:
+            import requests
+            from io import BytesIO
+            from PIL import Image as PILImage
+            from reportlab.platypus import Image as RLImage, Table, TableStyle
+            resp = requests.get(fallback_url, headers={"User-Agent": "Mozilla/5.0"}, verify=False, timeout=8)
+            if resp.status_code == 200:
+                pil_img = PILImage.open(BytesIO(resp.content))
+                if pil_img.mode not in ("RGB", "RGBA"):
+                    pil_img = pil_img.convert("RGB")
+                width, height = pil_img.size
+                max_width = 400.0
+                max_height = 350.0
+                if width > max_width:
+                    ratio = max_width / width
+                    width = max_width
+                    height = height * ratio
+                if height > max_height:
+                    ratio = max_height / height
+                    height = max_height
+                    width = width * ratio
+                out_io = BytesIO()
+                pil_img.save(out_io, format="PNG")
+                out_io.seek(0)
+                rl_img = RLImage(out_io, width=width, height=height)
+                t = Table([[rl_img]], colWidths=[width], hAlign='CENTER')
+                t.setStyle(TableStyle([
+                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ('LEFTPADDING', (0,0), (-1,-1), 0),
+                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
+                    ('TOPPADDING', (0,0), (-1,-1), 0),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+                ]))
+                return t
+        except Exception as fallback_e:
+            print(f"Failed to load fallback image flowable: {fallback_e}")
     return None
 
 def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
