@@ -19,3 +19,11 @@ memory/research.db
 data/chroma_db/
 
 debug_state.txt
+
+frontend/node_modules/
+frontend/dist/
+
+.env
+.env.local
+
+scratch/

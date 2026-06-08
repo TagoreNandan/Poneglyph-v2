@@ -1,4 +1,4 @@
-import ollama
+#import ollama
 import json
 from llm.gemini_client import generate
 
