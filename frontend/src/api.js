@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'https://poneglyph-v2-production.up.railway.app/api';
 
 export const fetchHistory = async () => {
   const res = await axios.get(`${API_BASE}/history`);
