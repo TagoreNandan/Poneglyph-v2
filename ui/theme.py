@@ -1,5 +1,5 @@
 """
-UI Theme Constants for ResearchPilot AI
+UI Theme Constants for Poneglyph Intelligence
 Defines colors, SVG icons, and common styling configuration.
 """
 

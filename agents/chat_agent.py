@@ -71,7 +71,7 @@ Search Query:
 
     # 4. Generate final answer with search context
     prompt = f"""
-You are ResearchPilot AI.
+You are Poneglyph Intelligence.
 
 Answer the user's follow-up question using the provided search results from the web, the original report context, and the conversation history.
 Your answer must be directly supported by the search results. Use inline citation markers (e.g. [1], [2]) if referring to specific search result sources.
@@ -93,7 +93,7 @@ QUESTION:
     except Exception as e:
         # Fallback to pure-report context in case of LLM error
         fallback_prompt = f"""
-You are ResearchPilot AI.
+You are Poneglyph Intelligence.
 
 Use the report and previous conversation to answer the user's follow-up question.
 

@@ -110,6 +110,9 @@ not just facts.
 Focus on insight generation,
 not summarization.
 
+IMPORTANT PRIORITY INSTRUCTION:
+The sources provided above are ordered by authority and priority (Priority 1 sources like Academic/Government appear first, Priority 5 sources like Community forums appear last). You MUST give higher priority sources significantly more weight and influence when synthesizing findings and drawing conclusions.
+
 Requirements:
 
 - Target length: 600-800 words
@@ -141,9 +144,10 @@ Identify patterns, innovations, and future developments.
 
 Mention disagreements or write "No significant conflicts found."
 
-# Recommendations
+# [Adapt Heading Based on Topic]
+(Choose ONE heading: "Recommendations" for business/policy, "Future Research Directions" for academic/scientific, or "Key Takeaways" for historical/fictional/entertainment)
 
-Suggest next steps, practical implications, or areas for further research.
+Suggest next steps, practical implications, or areas for further research based on the topic.
 
 # Conclusion
 
@@ -152,27 +156,50 @@ Provide a concise closing summary.
 Return valid markdown only.
 """
 
-    try:
-        return gemini_generate(prompt)
-    except Exception as e:
-        error_str = str(e).lower()
-        if any(x in error_str for x in ["429", "500", "503", "timeout", "rate limit"]):
+    import time
+    import sys
+
+    providers = [
+        ("Gemini", gemini_generate, "gemini-2.5-flash"),
+        ("Groq", groq_generate, "llama-3.3-70b-versatile"),
+        ("Gemini", gemini_generate, "gemini-1.5-pro"),
+        ("Groq", groq_generate, "llama-3.1-8b-instant")
+    ]
+    
+    backoff = [2, 5, 10]
+    
+    for i, (provider_name, func, model) in enumerate(providers):
+        for attempt in range(4): # 1 initial + 3 retries
+            start_time = time.time()
             try:
-                return groq_generate(prompt)
-            except Exception as fallback_e:
-                e = f"Gemini Error: {str(e)}\nGroq Fallback Error: {str(fallback_e)}"
-        
-        import sys
-        import traceback
-        print(f"CRITICAL: Research Generation Failed. Exception details:\n{e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        
-        return """# Research Report
+                print(f"DIAGNOSTIC: Provider selected: {provider_name}")
+                if attempt > 0:
+                    print(f"DIAGNOSTIC: Retry count: {attempt}")
+                result = func(prompt, model=model)
+                duration = time.time() - start_time
+                print(f"Provider {provider_name} ({model}) succeeded on attempt {attempt+1}. Duration: {duration:.2f}s")
+                return result
+            except Exception as e:
+                duration = time.time() - start_time
+                error_msg = str(e).lower()
+                is_transient = any(x in error_msg for x in ["429", "500", "503", "timeout", "unavailable", "rate limit", "temporarily", "server error"])
+                
+                print(f"FAILED: Provider={provider_name}, Model={model}, Reason={e}, Status=Error, RetryCount={attempt}, Duration={duration:.2f}s", file=sys.stderr)
+                
+                if is_transient and attempt < 3:
+                    sleep_time = backoff[attempt]
+                    print(f"Retrying {provider_name} ({model}) in {sleep_time}s...", file=sys.stderr)
+                    time.sleep(sleep_time)
+                else:
+                    if i < len(providers) - 1:
+                        next_provider = providers[i+1]
+                        print(f"DIAGNOSTIC: Fallback provider selected: {next_provider[0]}")
+                        print(f"Selected fallback provider: {next_provider[0]} ({next_provider[2]})", file=sys.stderr)
+                    else:
+                        print("CRITICAL: All research providers failed.", file=sys.stderr)
+                        return """# Research Report
 
-Report generation temporarily unavailable.
+Research generation could not be completed at this time.
 
-All research providers are currently busy or unavailable.
-
-Please try again in a few minutes.
-
-No report was generated."""
+Please try again shortly."""
+                    break # Break inner retry loop to move to next provider

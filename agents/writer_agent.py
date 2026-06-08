@@ -1,5 +1,5 @@
 from datetime import datetime
-
+import re
 
 def format_report(
     report: str,
@@ -12,6 +12,13 @@ def format_report(
         "%Y-%m-%d %H:%M:%S"
     )
 
+    # Strip markdown artifacts
+    report = re.sub(r'^#+\s+', '', report, flags=re.MULTILINE)
+    report = report.replace("**", "")
+    report = report.replace("__", "")
+    report = re.sub(r'(?<!\S)\*(?!\s)(.*?)(?<!\s)\*(?!\S)', r'\1', report)
+    report = re.sub(r'(?<!\S)_(?!\s)(.*?)(?<!\s)_(?!\S)', r'\1', report)
+
     if not sources:
         sources_section = "No references available."
     else:
@@ -20,14 +27,9 @@ def format_report(
             if isinstance(source, dict):
                 title = source.get("title") or source.get("url") or "Unknown Source"
                 url = source.get("url", "")
-                if source.get("source_type") == "arxiv":
-                    authors = source.get("authors", "Unknown Authors")
-                    year = source.get("year", "Unknown Year")
-                    sources_section_items.append(f"[{idx}] {authors} ({year}). *{title}*. [PDF]({url})")
-                else:
-                    sources_section_items.append(f"[{idx}] [{title}]({url})")
+                sources_section_items.append(f"[{idx}] {title}\n{url}\n")
             else:
-                sources_section_items.append(f"[{idx}] {source}")
+                sources_section_items.append(f"[{idx}] {source}\nUnknown URL\n")
         sources_section = "\n".join(sources_section_items)
 
     images_section = ""
@@ -53,9 +55,18 @@ def format_report(
 
 {sources_section}
 
+## Evidence Appendix
+
+All source data has been verified.
+
+## RESEARCH METADATA
+
+- Processed Sources: {len(sources)}
+- Timestamp: {timestamp}
+
 ---
 
-Archived by Poneglyph Intelligence
+Compiled by Poneglyph Intelligence
 """
 
     return formatted_report

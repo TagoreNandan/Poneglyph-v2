@@ -6,7 +6,7 @@ def render_hero():
     return f"""
     <div class="hero-container">
         <div style="margin-bottom: 24px;">{ICONS['logo_icon'].replace('width="28"', 'width="48"').replace('height="28"', 'height="48"')}</div>
-        <div class="hero-title">ResearchPilot AI</div>
+        <div class="hero-title">Poneglyph Intelligence</div>
         <div class="hero-subtitle">Autonomous Multi-Agent Research Platform</div>
         <div class="hero-explanation">
             Transform web data and local knowledge bases into comprehensive, 
@@ -20,7 +20,7 @@ def render_compact_header():
     return f"""
     <div class="compact-header">
         {ICONS['logo_icon']}
-        <div class="compact-title">ResearchPilot AI</div>
+        <div class="compact-title">Poneglyph Intelligence</div>
     </div>
     """
 

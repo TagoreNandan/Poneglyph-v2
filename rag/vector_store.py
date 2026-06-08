@@ -5,7 +5,7 @@ client = chromadb.PersistentClient(
 )
 
 collection = client.get_or_create_collection(
-    name="researchpilot"
+    name="poneglyph"
 )
 
 def get_collection():
