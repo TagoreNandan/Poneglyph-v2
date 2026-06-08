@@ -36,3 +36,8 @@ export const downloadPDF = async (report, insights, chatHistory) => {
   link.click();
   link.remove();
 };
+
+export const deleteReportApi = async (id) => {
+  const res = await axios.delete(`${API_BASE}/report/${id}`);
+  return res.data;
+};

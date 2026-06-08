@@ -487,3 +487,15 @@ def get_latest_report():
     conn.close()
 
     return row
+
+def delete_report_by_id(report_id):
+    conn = sqlite3.connect(
+        DB_NAME
+    )
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM research_history WHERE id = ?",
+        (report_id,)
+    )
+    conn.commit()
+    conn.close()

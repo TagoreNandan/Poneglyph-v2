@@ -981,7 +981,7 @@ body {
 /* PAGINATION CHAPTER PREV/NEXT */
 .chapter-navigation-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
   margin-top: 48px;
   border-top: 1px solid var(--outline);
@@ -998,6 +998,7 @@ body {
   flex-direction: column;
   gap: 4px;
   transition: all 0.2s;
+  min-width: 0;
 }
 
 .chapter-nav-btn:hover {
@@ -1021,11 +1022,19 @@ body {
   font-size: 14px;
   font-weight: 700;
   color: var(--on-background);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
   display: block;
   width: 100%;
+}
+
+@media (max-width: 600px) {
+  .chapter-navigation-row {
+    grid-template-columns: 1fr;
+  }
+  .chapter-nav-btn.next {
+    text-align: left;
+  }
 }
 
 .chapter-nav-placeholder {

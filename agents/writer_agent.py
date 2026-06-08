@@ -52,6 +52,10 @@ def format_report(
 ## References
 
 {sources_section}
+
+---
+
+Archived by Poneglyph Intelligence
 """
 
     return formatted_report
