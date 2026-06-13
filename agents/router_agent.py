@@ -1,8 +1,37 @@
+import re
 from llm.gemini_client import generate as gemini_generate
 
-def classify_query(query):
+def detect_academic_query(query: str) -> bool:
+    """
+    Check if the query strongly indicates academic research intent based on keywords.
+    """
+    normalized = query.lower()
+    academic_keywords = [
+        "paper",
+        "research",
+        "study",
+        "survey",
+        "authors",
+        "citation",
+        "benchmark",
+        "state of the art",
+        "published",
+        "arxiv",
+        "scientific",
+        "academic"
+    ]
+    for kw in academic_keywords:
+        pattern = rf"\b{re.escape(kw)}\b"
+        if re.search(pattern, normalized):
+            return True
+    return False
 
+def classify_query(query: str) -> str:
     query = query.lower()
+
+    # Return ARXIV only when academic intent is strongly detected via keywords
+    if detect_academic_query(query):
+        return "ARXIV"
 
     classification_prompt = f"""
 Classify the following query into exactly one of three categories:

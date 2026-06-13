@@ -1,0 +1,587 @@
+diff --git a/agents/reader_agent.py b/agents/reader_agent.py
+index b0ea03c..a38d3f5 100644
+--- a/agents/reader_agent.py
++++ b/agents/reader_agent.py
+@@ -9,10 +9,10 @@ def summarize_source(source):
+         or ""
+     )
+     
+-    # Return directly truncated content to save Gemini calls/tokens
++    # Ensure context fits within token limits by safely trimming (2500 chars to avoid 6000 TPM limit)
+     truncated = content.strip()
+-    if len(truncated) > 5000:
+-        truncated = truncated[:5000] + "..."
++    if len(truncated) > 2500:
++        truncated = truncated[:2500] + "..."
+         
+     return {
+         "title": source["title"],
+diff --git a/agents/research_agent.py b/agents/research_agent.py
+index 1530703..5fa903e 100644
+--- a/agents/research_agent.py
++++ b/agents/research_agent.py
+@@ -162,28 +162,34 @@ Return valid markdown only.
+     providers = [
+         ("Gemini", gemini_generate, "gemini-2.5-flash"),
+         ("Groq", groq_generate, "llama-3.3-70b-versatile"),
+-        ("Gemini", gemini_generate, "gemini-1.5-pro"),
++        ("Gemini", gemini_generate, "gemini-1.5-pro-latest"),
+         ("Groq", groq_generate, "llama-3.1-8b-instant")
+     ]
+     
+     backoff = [2, 5, 10]
+     
++    prompt_len = len(prompt)
++    est_tokens = prompt_len // 4
++    print(f"DIAGNOSTIC: Prompt size is {prompt_len} characters (~{est_tokens} tokens)")
++    
+     for i, (provider_name, func, model) in enumerate(providers):
+         for attempt in range(4): # 1 initial + 3 retries
+             start_time = time.time()
+             try:
+-                print(f"DIAGNOSTIC: Provider selected: {provider_name}")
++                print(f"DIAGNOSTIC: Provider selected: {provider_name}, Model selected: {model}")
+                 if attempt > 0:
+                     print(f"DIAGNOSTIC: Retry count: {attempt}")
+                 result = func(prompt, model=model)
+                 duration = time.time() - start_time
+-                print(f"Provider {provider_name} ({model}) succeeded on attempt {attempt+1}. Duration: {duration:.2f}s")
++                print(f"DIAGNOSTIC: Final success state: Provider {provider_name} ({model}) succeeded on attempt {attempt+1}. Duration: {duration:.2f}s")
++                print(f"DIAGNOSTIC: Final token usage: ~{est_tokens} input tokens")
+                 return result
+             except Exception as e:
+                 duration = time.time() - start_time
+                 error_msg = str(e).lower()
+-                is_transient = any(x in error_msg for x in ["429", "500", "503", "timeout", "unavailable", "rate limit", "temporarily", "server error"])
++                is_transient = any(x in error_msg for x in ["429", "500", "503", "timeout", "unavailable", "rate limit", "rate_limit", "temporarily", "server error", "resource_exhausted", "quota"])
+                 
++                print(f"DIAGNOSTIC: Exception text: {e}")
+                 print(f"FAILED: Provider={provider_name}, Model={model}, Reason={e}, Status=Error, RetryCount={attempt}, Duration={duration:.2f}s", file=sys.stderr)
+                 
+                 if is_transient and attempt < 3:
+@@ -193,9 +199,9 @@ Return valid markdown only.
+                 else:
+                     if i < len(providers) - 1:
+                         next_provider = providers[i+1]
+-                        print(f"DIAGNOSTIC: Fallback provider selected: {next_provider[0]}")
+-                        print(f"Selected fallback provider: {next_provider[0]} ({next_provider[2]})", file=sys.stderr)
++                        print(f"DIAGNOSTIC: Fallback provider used: {next_provider[0]} ({next_provider[2]})")
+                     else:
++                        print("DIAGNOSTIC: Final failure state: All research providers failed.")
+                         print("CRITICAL: All research providers failed.", file=sys.stderr)
+                         return """# Research Report
+ 
+diff --git a/agents/writer_agent.py b/agents/writer_agent.py
+index 1a13f1f..a82f726 100644
+--- a/agents/writer_agent.py
++++ b/agents/writer_agent.py
+@@ -18,6 +18,9 @@ def format_report(
+     report = report.replace("__", "")
+     report = re.sub(r'(?<!\S)\*(?!\s)(.*?)(?<!\s)\*(?!\S)', r'\1', report)
+     report = re.sub(r'(?<!\S)_(?!\s)(.*?)(?<!\s)_(?!\S)', r'\1', report)
++    
++    # Consolidate consecutive numeric citations e.g. [1][2] -> [1,2] safely
++    report = re.sub(r'(?<=\d)\]\s*\[(?=\d+\])', ',', report)
+ 
+     if not sources:
+         sources_section = "No references available."
+diff --git a/api.py b/api.py
+index 11c8ea7..42febb6 100644
+--- a/api.py
++++ b/api.py
+@@ -18,6 +18,9 @@ from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
+ 
+ app = FastAPI(title="Poneglyph Intelligence Backend API")
+ 
++print("STARTUP: loaded research_agent.py")
++print("STARTUP: loaded graph.py")
++
+ # Initialize database and prepopulate baseline reports
+ init_db()
+ 
+@@ -788,10 +791,25 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
+ 
+ @app.post("/api/research")
+ def run_research(req: ResearchRequest):
+-    print(f"DIAGNOSTIC: Request received [Query: {req.query}]")
++    import time
++    import json
++    
++    start_time = time.time()
++    print(json.dumps({"event": "research_started", "query": req.query, "timestamp": start_time}))
+     try:
+         result = graph.invoke({"query": req.query, "bypass_ambiguity": req.bypass_ambiguity})
+-        print(f"DIAGNOSTIC: Report generated successfully [Query: {req.query}]")
++        duration = time.time() - start_time
++        source_count = len(result.get("sources", []))
++        
++        print(json.dumps({
++            "event": "research_complete",
++            "query": req.query,
++            "duration_sec": round(duration, 2),
++            "source_count": source_count,
++            "status": "success",
++            "route": result.get("route", "Unknown")
++        }))
++        
+         return {
+             "needs_clarification": result.get("needs_clarification", False),
+             "clarification_options": result.get("clarification_options", []),
+@@ -802,6 +820,14 @@ def run_research(req: ResearchRequest):
+             "activity_log": result.get("activity_log", [])
+         }
+     except Exception as e:
++        duration = time.time() - start_time
++        print(json.dumps({
++            "event": "research_failed",
++            "query": req.query,
++            "duration_sec": round(duration, 2),
++            "status": "error",
++            "error_message": str(e)
++        }))
+         raise HTTPException(status_code=500, detail=str(e))
+ 
+ 
+diff --git a/frontend/src/App.jsx b/frontend/src/App.jsx
+index 4a5a2d3..51b230d 100644
+--- a/frontend/src/App.jsx
++++ b/frontend/src/App.jsx
+@@ -1,6 +1,6 @@
+ import React, { useState, useEffect, useRef } from 'react';
+ import ReactMarkdown from 'react-markdown';
+-import { Search, Archive, Folder, Settings, Download, FileText, Activity, AlertCircle, ArrowRight, MessageSquare, Loader, X, ExternalLink, ChevronRight, HelpCircle, ShieldAlert, Trash2 } from 'lucide-react';
++import { Search, Archive, Folder, Settings, Download, FileText, Activity, AlertCircle, ArrowRight, MessageSquare, Loader, X, ExternalLink, ChevronRight, HelpCircle, ShieldAlert, Trash2, Menu } from 'lucide-react';
+ import { fetchHistory, fetchReport, generateResearch, sendChat, downloadPDF, deleteReportApi } from './api';
+ import './index.css';
+ 
+@@ -186,11 +186,11 @@ function App() {
+   const [query, setQuery] = useState('');
+   const [isLoading, setIsLoading] = useState(false);
+   const loadingMessages = [
+-    "Research in progress...",
+-    "Expanding retrieval scope...",
+-    "Retrying source collection...",
+-    "Attempting fallback provider...",
+-    "Synthesizing final findings..."
++    "Initializing research protocols...",
++    "Retrieving and analyzing relevant sources...",
++    "Extracting key intelligence and evidence...",
++    "Generating comprehensive report...",
++    "Finalizing references and document styling..."
+   ];
+   const [loadingMessageIdx, setLoadingMessageIdx] = useState(0);
+ 
+@@ -198,8 +198,11 @@ function App() {
+     let interval;
+     if (isLoading) {
+       interval = setInterval(() => {
+-        setLoadingMessageIdx(prev => (prev + 1) % loadingMessages.length);
+-      }, 5000);
++        setLoadingMessageIdx(prev => {
++          if (prev < loadingMessages.length - 1) return prev + 1;
++          return prev;
++        });
++      }, 7000); // 7s per stage gives ~35s total progression
+     } else {
+       setLoadingMessageIdx(0);
+     }
+@@ -326,8 +329,11 @@ function App() {
+   const [manualTopic, setManualTopic] = useState('');
+   const [addedQuestions, setAddedQuestions] = useState(new Set());
+ 
+-  // Scroll progress tracker
++  // Scroll Progress
+   const [scrollProgress, setScrollProgress] = useState(0);
++  
++  // Mobile Nav State
++  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+ 
+   const chatEndRef = useRef(null);
+ 
+@@ -1277,10 +1283,10 @@ function App() {
+                   <img 
+                     src={reportData.images[0]} 
+                     className="report-hero-image" 
+-                    alt="Research Hero Illustration" 
++                    alt="" 
+                     onError={(e) => {
+                       e.target.onerror = null;
+-                      e.target.src = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop";
++                      e.target.style.display = 'none';
+                     }}
+                   />
+                 )}
+@@ -1503,10 +1509,26 @@ function App() {
+       {/* Top scroll tracker progress bar */}
+       <div className="scroll-progress" style={{ width: `${scrollProgress}%` }} />
+ 
++      {/* MOBILE TOP BAR */}
++      <div className="mobile-top-bar">
++        <button className="mobile-menu-btn" onClick={() => setIsMobileNavOpen(true)}>
++          <Menu size={20} />
++        </button>
++        <span className="mobile-top-title">Poneglyph Research</span>
++      </div>
++
++      {/* MOBILE OVERLAY BACKDROP */}
++      {isMobileNavOpen && (
++        <div className="mobile-sidebar-backdrop" onClick={() => setIsMobileNavOpen(false)} />
++      )}
++
+       {/* PERSISTENT LEFT NAVIGATION SIDEBAR */}
+-      <div className="sidebar">
+-        <div className="sidebar-header">
++      <div className={`sidebar ${isMobileNavOpen ? 'mobile-open' : ''}`}>
++        <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+           <span className="sidebar-title">Poneglyph Research</span>
++          <button className="mobile-close-btn" onClick={() => setIsMobileNavOpen(false)}>
++            <X size={20} />
++          </button>
+         </div>
+         
+         {/* Main Navigation Links */}
+diff --git a/frontend/src/api.js b/frontend/src/api.js
+index ee5cef4..1b37c1e 100644
+--- a/frontend/src/api.js
++++ b/frontend/src/api.js
+@@ -1,6 +1,6 @@
+ import axios from 'axios';
+ 
+-const API_BASE = 'https://poneglyph-v2-production.up.railway.app/api';
++const API_BASE = 'http://localhost:8000/api';
+ 
+ export const fetchHistory = async () => {
+   const res = await axios.get(`${API_BASE}/history`);
+diff --git a/frontend/src/index.css b/frontend/src/index.css
+index d0b1ccc..99b863f 100644
+--- a/frontend/src/index.css
++++ b/frontend/src/index.css
+@@ -1767,3 +1767,158 @@ body {
+ .route-badge.badge-rag {
+   background: #D97706;
+ }
++
++/* =========================================================
++   MOBILE RESPONSIVENESS (PRIORITY 1)
++   ========================================================= */
++
++.mobile-top-bar {
++  display: none;
++}
++.mobile-sidebar-backdrop {
++  display: none;
++}
++.mobile-close-btn {
++  display: none;
++}
++
++@media (max-width: 768px) {
++  /* Layout reset */
++  .app-container {
++    flex-direction: column;
++  }
++  
++  /* Mobile Top Bar */
++  .mobile-top-bar {
++    display: flex;
++    align-items: center;
++    gap: 12px;
++    background: var(--surface-container);
++    border-bottom: 1px solid var(--outline);
++    padding: 12px 16px;
++    z-index: 900;
++  }
++  
++  .mobile-menu-btn {
++    background: none;
++    border: none;
++    color: var(--on-background);
++    cursor: pointer;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++  }
++  
++  .mobile-top-title {
++    font-size: 16px;
++    font-weight: 800;
++    text-transform: uppercase;
++    color: var(--on-background);
++  }
++
++  /* Sidebar styling for mobile (Off-canvas) */
++  .sidebar {
++    position: fixed;
++    top: 0;
++    left: 0;
++    height: 100vh;
++    width: 280px;
++    z-index: 1000;
++    transform: translateX(-100%);
++    transition: transform 0.3s ease;
++    box-shadow: none;
++  }
++  
++  .sidebar.mobile-open {
++    transform: translateX(0);
++    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
++  }
++  
++  .mobile-close-btn {
++    display: flex;
++    background: none;
++    border: none;
++    color: var(--on-background);
++    cursor: pointer;
++  }
++  
++  .mobile-sidebar-backdrop {
++    display: block;
++    position: fixed;
++    top: 0;
++    left: 0;
++    width: 100vw;
++    height: 100vh;
++    background: rgba(0, 0, 0, 0.5);
++    z-index: 950;
++    backdrop-filter: blur(2px);
++  }
++
++  /* Main Content Adjustments */
++  .main-content {
++    padding: 16px;
++    height: calc(100vh - 50px);
++    overflow-x: hidden;
++  }
++
++  .home-container, .collections-container {
++    padding: 16px;
++  }
++
++  /* Report Layout Adjustments */
++  .report-center-column {
++    padding: 20px;
++  }
++  
++  .report-container {
++    gap: 20px;
++  }
++  
++  /* Chat window adjustments */
++  .chat-drawer {
++    width: 100%;
++    right: -100%;
++  }
++  
++  .chat-drawer.open {
++    right: 0;
++  }
++
++  .chat-drawer-input-form {
++    flex-wrap: wrap;
++  }
++
++  /* Images and Tables scaling */
++  .markdown-body img, .featured-card-image img {
++    max-width: 100%;
++    height: auto;
++    object-fit: cover;
++  }
++  
++  .markdown-body table {
++    display: block;
++    overflow-x: auto;
++    white-space: nowrap;
++  }
++
++  /* Search & Hero Adjustments */
++  .hero-search h1 {
++    font-size: 28px;
++  }
++  
++  .hero-search p {
++    font-size: 14px;
++  }
++  
++  /* Rail buttons */
++  .rail-actions {
++    flex-direction: row;
++    flex-wrap: wrap;
++  }
++  
++  .pdf-export-btn, .chat-toggle-btn, .delete-report-btn {
++    flex: 1;
++    min-width: 120px;
++    justify-content: center;
++  }
++}
+diff --git a/graph.py b/graph.py
+index 4e1b6a5..6750a5a 100644
+--- a/graph.py
++++ b/graph.py
+@@ -535,12 +535,13 @@ def fetch_report_images(topic: str) -> list:
+     print(f"Fetching images for topic: {topic}")
+     candidates = []
+     try:
+-        from llm.gemini_client import generate
+         from tavily import TavilyClient
+         import os
++        
++        from llm.groq_client import generate as groq_generate
+         import json
+         
+-        # 1. Generate 5 visual queries based on categories
++        # 1. Generate 5 visual queries based on categories via Groq
+         query_generation_prompt = f"""
+ Given the research topic: "{topic}", generate exactly 5 distinct search queries optimized for search engines to find high-quality, relevant images for a research report.
+ You must generate exactly one query for each of the following categories:
+@@ -552,11 +553,15 @@ You must generate exactly one query for each of the following categories:
+ 
+ Do not include category labels or formatting. Output exactly 5 lines, one query per line.
+ """
+-        response = generate(query_generation_prompt).strip()
+-        queries = [q.strip() for q in response.split("\n") if q.strip()]
+-        queries = [q for q in queries if len(q) < 100]
+-        if not queries:
+-            queries = [topic]
++        try:
++            response = groq_generate(query_generation_prompt, model="llama-3.1-8b-instant").strip()
++            queries = [q.strip() for q in response.split("\n") if q.strip()]
++            queries = [q for q in queries if len(q) < 100]
++            if len(queries) != 5:
++                queries = [topic, f"{topic} official", f"{topic} overview", f"{topic} concept", f"{topic} infographic"]
++        except Exception as e:
++            print(f"Groq query generation failed, falling back to deterministic: {e}")
++            queries = [topic, f"{topic} official", f"{topic} overview", f"{topic} concept", f"{topic} infographic"]
+             
+         print(f"Generated image search queries: {queries}")
+         
+@@ -564,7 +569,7 @@ Do not include category labels or formatting. Output exactly 5 lines, one query
+         client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+         seen_urls = set()
+         
+-        from concurrent.futures import ThreadPoolExecutor, as_completed
++        from concurrent.futures import ThreadPoolExecutor
+         
+         def run_single_search(q):
+             try:
+@@ -576,15 +581,14 @@ Do not include category labels or formatting. Output exactly 5 lines, one query
+ 
+         futures = []
+         with ThreadPoolExecutor(max_workers=5) as executor:
+-            for query in queries[:5]:
++            for query in queries:
+                 futures.append(executor.submit(run_single_search, query))
+                 
+-        for fut in as_completed(futures):
++        for fut in futures:
+             query, res = fut.result()
+             results = res.get("results", [])
+-            print(f"Tavily image search for '{query}' returned {len(results)} search results")
+             
+-            # First, collect images associated with specific results (with context)
++            # Collect images associated with specific results (with context)
+             for r in results:
+                 img_list = r.get("images", [])
+                 for img in img_list:
+@@ -593,12 +597,12 @@ Do not include category labels or formatting. Output exactly 5 lines, one query
+                         candidates.append({
+                             "url": img,
+                             "query": query,
+-                            "source_url": r.get("url"),
++                            "source_url": r.get("url", ""),
+                             "source_title": r.get("title", "Unknown Source"),
+                             "source_context": r.get("content", "")[:250]
+                         })
+             
+-            # Second, collect any remaining general images that didn't map to a specific result
++            # Collect any remaining general images that didn't map to a specific result
+             general_imgs = res.get("images", [])
+             for img in general_imgs:
+                 if img and img.startswith("http") and img not in seen_urls:
+@@ -610,13 +614,22 @@ Do not include category labels or formatting. Output exactly 5 lines, one query
+                         "source_title": "Image Search Result",
+                         "source_context": "Found directly via image search query."
+                     })
++                    
++        # Filter out PNGs and SVGs to avoid transparent logos
++        filtered_candidates = []
++        for c in candidates:
++            url_lower = c["url"].lower()
++            if ".png" in url_lower or ".svg" in url_lower:
++                continue
++            filtered_candidates.append(c)
+                 
+-        # Limit to top 12 candidates for scoring
++        candidates = filtered_candidates
++        # Limit to top 12 candidates for scoring to protect Groq TPM
+         candidates = candidates[:12]
+         if not candidates:
+             return []
+             
+-        # 3. Score and deduplicate candidate images via Gemini using context metadata
++        # 3. Score and deduplicate candidate images via Groq using context metadata
+         scoring_prompt = f"""
+ We are generating a research report on the topic: "{topic}".
+ We have retrieved the following candidate images along with their search queries, source titles, source URLs, and context snippets.
+@@ -636,38 +649,33 @@ Candidate Images:
+ {json.dumps(candidates, indent=2)}
+ 
+ Return the results as a JSON array of objects, containing ONLY the "url", "score", and a brief "reason". Order the array by score descending.
+-Return ONLY valid JSON:
++Return ONLY a valid JSON array. DO NOT use markdown. DO NOT use backticks. DO NOT add any extra text or explanations.
+ [
+-  {{"url": "...", "score": 8, "reason": "..."}},
+-  ...
++  {{"url": "...", "score": 8, "reason": "..."}}
+ ]
+ """
+-        scoring_resp = generate(scoring_prompt).strip()
+-        start = scoring_resp.find("[")
+-        end = scoring_resp.rfind("]")
+-        if start != -1 and end != -1 and end > start:
+-            parsed = json.loads(scoring_resp[start:end+1])
+-            parsed = sorted(parsed, key=lambda x: x.get("score", 0), reverse=True)
+-            final_images = [img["url"] for img in parsed if img.get("score", 0) > 4][:3]
+-            if final_images:
+-                print(f"Successfully scored and selected {len(final_images)} images.")
+-                return final_images
++        scoring_resp = groq_generate(scoring_prompt, model="llama-3.1-8b-instant").strip()
++        
++        # Robust JSON extraction
++        import re
++        match = re.search(r'\[\s*\{.*?\}\s*\]', scoring_resp, re.DOTALL)
++        if match:
++            json_str = match.group(0)
++            try:
++                parsed = json.loads(json_str)
++                parsed = sorted(parsed, key=lambda x: x.get("score", 0), reverse=True)
++                final_images = [img["url"] for img in parsed if img.get("score", 0) > 4][:3]
++                if final_images:
++                    print(f"Successfully scored and selected {len(final_images)} images.")
++                    return final_images
++            except json.JSONDecodeError as e:
++                print(f"JSONDecodeError parsing image scoring: {e}\nRaw output: {json_str[:100]}...")
++                
++        return []
+ 
+     except Exception as e:
+-        print(f"Failed to fetch and score report images: {e}")
+-        
+-    # Fallback deduplication and basic screen/watermark filtering
+-    fallback_images = []
+-    try:
+-        for c in candidates:
+-            url_lower = c["url"].lower()
+-            if any(x in url_lower for x in ["screenshot", "desktop", "ui", "menu", "watermark"]):
+-                continue
+-            if c["url"] not in fallback_images:
+-                fallback_images.append(c["url"])
+-    except Exception:
+-        pass
+-    return fallback_images[:3]
++        print(f"Image fetching/scoring failed: {e}")
++        return []
+ 
+ 
+ def writer_node(state: ResearchState):

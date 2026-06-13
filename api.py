@@ -554,7 +554,7 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
     in_ref_block = False
     for line in lines:
         line_strip = line.strip()
-        if line_strip.startswith("## References") or line_strip.startswith("# References"):
+        if line_strip.startswith("## References") or line_strip.startswith("# References") or line_strip.startswith("## Academic Sources") or line_strip.startswith("# Academic Sources"):
             in_ref_block = True
             continue
         if in_ref_block:
@@ -654,10 +654,11 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
                 content.append(Spacer(1, 10))
             continue
 
-        if line_strip.startswith("## References") or line_strip.startswith("# References"):
+        if line_strip.startswith("## References") or line_strip.startswith("# References") or line_strip.startswith("## Academic Sources") or line_strip.startswith("# Academic Sources"):
             in_references = True
             content.append(Spacer(1, 10))
-            content.append(Paragraph("References", h1_style))
+            heading_text = "Academic Sources" if "Academic Sources" in line_strip else "References"
+            content.append(Paragraph(heading_text, h1_style))
             content.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#E5E7EB"), spaceAfter=8))
             continue
             

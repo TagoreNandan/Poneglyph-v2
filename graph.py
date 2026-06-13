@@ -164,7 +164,7 @@ def calculate_quality_metrics(report: str, sources: list, current_year=2026):
                 current_para = []
             continue
             
-        if line_strip.startswith("## References") or line_strip.startswith("# References") or in_references:
+        if line_strip.startswith("## References") or line_strip.startswith("# References") or line_strip.startswith("## Academic Sources") or line_strip.startswith("# Academic Sources") or in_references:
             in_references = True
             if current_para:
                 body_paragraphs.append(" ".join(current_para))
@@ -690,7 +690,8 @@ def writer_node(state: ResearchState):
         report=report_to_format,
         query=state["query"],
         sources=state["sources"],
-        images=images
+        images=images,
+        route=state.get("route", "WEB")
     )
 
     # Calculate Research Quality Indicators
@@ -752,7 +753,8 @@ def rag_writer_node(state: ResearchState):
     formatted_report = format_report(
         report=state["rag_answer"],
         query=state["query"],
-        sources=[]
+        sources=[],
+        route="RAG"
     )
 
     insights = {
@@ -848,11 +850,11 @@ def hybrid_node(state: ResearchState):
 def arxiv_node(state: ResearchState):
     print("ARXIV NODE EXECUTED")
     print("DIAGNOSTIC: Retrieval started")
-    from agents.arxiv_agent import search_arxiv
+    from services.arxiv_service import search_arxiv
     query = state["query"]
     
     try:
-        results = search_arxiv(query)
+        results = search_arxiv(query, max_results=10)
     except Exception as e:
         print(f"arXiv search failed: {e}. Falling back to WEB route.")
         results = []
@@ -862,16 +864,16 @@ def arxiv_node(state: ResearchState):
         print("Expanding queries to meet minimum source threshold for arXiv...")
         try:
             expanded = expand_academic_queries(query)
-            seen_urls = {r.get("url") for r in results if r.get("url")}
+            seen_urls = {r.get("arxiv_url") for r in results if r.get("arxiv_url")}
             for q in expanded:
                 if len(results) >= 6:
                     break
                 if q.lower() == query.lower():
                     continue
                 try:
-                    more_results = search_arxiv(q)
+                    more_results = search_arxiv(q, max_results=10)
                     for mr in more_results:
-                        url = mr.get("url")
+                        url = mr.get("arxiv_url")
                         if url and url not in seen_urls:
                             results.append(mr)
                             seen_urls.add(url)
@@ -889,21 +891,29 @@ def arxiv_node(state: ResearchState):
         }
 
     for r in results:
-        r["priority"] = get_source_priority(r.get("url", ""), "arxiv")
+        r["priority"] = get_source_priority(r.get("arxiv_url", ""), "arxiv")
     results.sort(key=lambda x: x["priority"])
 
     sources = []
     processed_sources = []
-    for idx, paper in enumerate(results[:8], start=1):
-        year = paper["published"][:4] if paper.get("published") else "Unknown"
-        authors_str = ", ".join(paper["authors"]) if paper.get("authors") else "Unknown"
+    for paper in results[:8]:
+        published_val = paper.get("published_date") or paper.get("published") or ""
+        year = published_val[:4] if published_val else "Unknown"
+        
+        authors_val = paper.get("authors")
+        if isinstance(authors_val, list):
+            authors_str = ", ".join(authors_val)
+        else:
+            authors_str = str(authors_val) if authors_val else "Unknown"
+            
         item = {
-            "title": paper["title"],
-            "url": paper["url"],
+            "title": paper.get("title", "Unknown Title"),
+            "url": paper.get("arxiv_url") or paper.get("pdf_url") or "",
+            "pdf_url": paper.get("pdf_url") or "",
             "authors": authors_str,
             "year": year,
-            "content": paper["summary"],
-            "raw_content": paper["summary"],
+            "content": paper.get("summary", ""),
+            "raw_content": paper.get("summary", ""),
             "source_type": "arxiv"
         }
         sources.append(item)
@@ -918,6 +928,7 @@ def arxiv_node(state: ResearchState):
         "processed_sources": processed_sources,
         "activity_log": log
     }
+
 
 def arxiv_decision(state: ResearchState):
     if state["route"] == "WEB":

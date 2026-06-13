@@ -1,0 +1,334 @@
+diff --git a/agents/reader_agent.py b/agents/reader_agent.py
+index b0ea03c..aa9fd2c 100644
+--- a/agents/reader_agent.py
++++ b/agents/reader_agent.py
+@@ -9,13 +9,46 @@ def summarize_source(source):
+         or ""
+     )
+     
+-    # Return directly truncated content to save Gemini calls/tokens
+-    truncated = content.strip()
+-    if len(truncated) > 5000:
+-        truncated = truncated[:5000] + "..."
++    # If the content is already short, just return it
++    if len(content.strip()) < 1000:
++        return {
++            "title": source["title"],
++            "url": source["url"],
++            "content": content.strip()
++        }
+         
++    base_prompt = f"""
++You are a research data extractor.
++Your job is to read the source below and extract its most critical information in a dense, bulleted format.
++Extract facts, figures, key arguments, and context. Do NOT write an intro or conclusion.
++Keep the output strictly under 250 words.
++
++SOURCE TITLE: {source['title']}
++SOURCE URL: {source['url']}
++
++CONTENT:
++{{CONTENT_PLACEHOLDER}}
++"""
++    
++    try:
++        import time
++        import sys
++        
++        # Try Gemini first for source compression (high limit)
++        print(f"DIAGNOSTIC: Compressing source '{source['title']}' via Gemini...")
++        summary = gemini_generate(base_prompt.replace("{CONTENT_PLACEHOLDER}", content[:50000]), model="gemini-2.5-flash")
++    except Exception as e:
++        print(f"DIAGNOSTIC: Gemini failed to compress source, falling back to Groq: {e}", file=sys.stderr)
++        try:
++            # Fallback to Groq instant (Max 6000 TPM -> cap chars at 8000 to safely stay under ~2500 tokens)
++            summary = groq_generate(base_prompt.replace("{CONTENT_PLACEHOLDER}", content[:8000]), model="llama-3.1-8b-instant")
++        except Exception as fallback_e:
++            print(f"DIAGNOSTIC: Groq failed to compress source: {fallback_e}", file=sys.stderr)
++            # Hard fallback: truncation
++            summary = content.strip()[:3000] + "\n[Truncated due to processing error]"
++
+     return {
+         "title": source["title"],
+         "url": source["url"],
+-        "content": truncated
++        "content": summary
+     }
+\ No newline at end of file
+diff --git a/agents/research_agent.py b/agents/research_agent.py
+index 1530703..5fa903e 100644
+--- a/agents/research_agent.py
++++ b/agents/research_agent.py
+@@ -162,28 +162,34 @@ Return valid markdown only.
+     providers = [
+         ("Gemini", gemini_generate, "gemini-2.5-flash"),
+         ("Groq", groq_generate, "llama-3.3-70b-versatile"),
+-        ("Gemini", gemini_generate, "gemini-1.5-pro"),
++        ("Gemini", gemini_generate, "gemini-1.5-pro-latest"),
+         ("Groq", groq_generate, "llama-3.1-8b-instant")
+     ]
+     
+     backoff = [2, 5, 10]
+     
++    prompt_len = len(prompt)
++    est_tokens = prompt_len // 4
++    print(f"DIAGNOSTIC: Prompt size is {prompt_len} characters (~{est_tokens} tokens)")
++    
+     for i, (provider_name, func, model) in enumerate(providers):
+         for attempt in range(4): # 1 initial + 3 retries
+             start_time = time.time()
+             try:
+-                print(f"DIAGNOSTIC: Provider selected: {provider_name}")
++                print(f"DIAGNOSTIC: Provider selected: {provider_name}, Model selected: {model}")
+                 if attempt > 0:
+                     print(f"DIAGNOSTIC: Retry count: {attempt}")
+                 result = func(prompt, model=model)
+                 duration = time.time() - start_time
+-                print(f"Provider {provider_name} ({model}) succeeded on attempt {attempt+1}. Duration: {duration:.2f}s")
++                print(f"DIAGNOSTIC: Final success state: Provider {provider_name} ({model}) succeeded on attempt {attempt+1}. Duration: {duration:.2f}s")
++                print(f"DIAGNOSTIC: Final token usage: ~{est_tokens} input tokens")
+                 return result
+             except Exception as e:
+                 duration = time.time() - start_time
+                 error_msg = str(e).lower()
+-                is_transient = any(x in error_msg for x in ["429", "500", "503", "timeout", "unavailable", "rate limit", "temporarily", "server error"])
++                is_transient = any(x in error_msg for x in ["429", "500", "503", "timeout", "unavailable", "rate limit", "rate_limit", "temporarily", "server error", "resource_exhausted", "quota"])
+                 
++                print(f"DIAGNOSTIC: Exception text: {e}")
+                 print(f"FAILED: Provider={provider_name}, Model={model}, Reason={e}, Status=Error, RetryCount={attempt}, Duration={duration:.2f}s", file=sys.stderr)
+                 
+                 if is_transient and attempt < 3:
+@@ -193,9 +199,9 @@ Return valid markdown only.
+                 else:
+                     if i < len(providers) - 1:
+                         next_provider = providers[i+1]
+-                        print(f"DIAGNOSTIC: Fallback provider selected: {next_provider[0]}")
+-                        print(f"Selected fallback provider: {next_provider[0]} ({next_provider[2]})", file=sys.stderr)
++                        print(f"DIAGNOSTIC: Fallback provider used: {next_provider[0]} ({next_provider[2]})")
+                     else:
++                        print("DIAGNOSTIC: Final failure state: All research providers failed.")
+                         print("CRITICAL: All research providers failed.", file=sys.stderr)
+                         return """# Research Report
+ 
+diff --git a/agents/writer_agent.py b/agents/writer_agent.py
+index 1a13f1f..a82f726 100644
+--- a/agents/writer_agent.py
++++ b/agents/writer_agent.py
+@@ -18,6 +18,9 @@ def format_report(
+     report = report.replace("__", "")
+     report = re.sub(r'(?<!\S)\*(?!\s)(.*?)(?<!\s)\*(?!\S)', r'\1', report)
+     report = re.sub(r'(?<!\S)_(?!\s)(.*?)(?<!\s)_(?!\S)', r'\1', report)
++    
++    # Consolidate consecutive numeric citations e.g. [1][2] -> [1,2] safely
++    report = re.sub(r'(?<=\d)\]\s*\[(?=\d+\])', ',', report)
+ 
+     if not sources:
+         sources_section = "No references available."
+diff --git a/graph.py b/graph.py
+index 4e1b6a5..d5c5a82 100644
+--- a/graph.py
++++ b/graph.py
+@@ -535,36 +535,25 @@ def fetch_report_images(topic: str) -> list:
+     print(f"Fetching images for topic: {topic}")
+     candidates = []
+     try:
+-        from llm.gemini_client import generate
+         from tavily import TavilyClient
+         import os
+-        import json
+         
+-        # 1. Generate 5 visual queries based on categories
+-        query_generation_prompt = f"""
+-Given the research topic: "{topic}", generate exactly 5 distinct search queries optimized for search engines to find high-quality, relevant images for a research report.
+-You must generate exactly one query for each of the following categories:
+-1. person: A key historical figure or person related to the topic (e.g. "Linus Torvalds portrait" for Linux).
+-2. concept: A technical concept diagram, architecture, or model representation (e.g. "Linux kernel architecture diagram").
+-3. timeline: A timeline, history infographic, or evolutionary chart (e.g. "Linux history timeline").
+-4. landmark: A visual landmark, emblem, famous mascot, or key artifact (e.g. "Tux penguin mascot Linux logo").
+-5. overview: A general historical photograph, high-level overview, or key setup (e.g. "early computer running Linux history").
+-
+-Do not include category labels or formatting. Output exactly 5 lines, one query per line.
+-"""
+-        response = generate(query_generation_prompt).strip()
+-        queries = [q.strip() for q in response.split("\n") if q.strip()]
+-        queries = [q for q in queries if len(q) < 100]
+-        if not queries:
+-            queries = [topic]
++        # 1. Deterministic visual queries based on categories
++        queries = [
++            topic,
++            f"{topic} official",
++            f"{topic} overview",
++            f"{topic} concept",
++            f"{topic} infographic"
++        ]
+             
+-        print(f"Generated image search queries: {queries}")
++        print(f"Deterministic image search queries: {queries}")
+         
+         # 2. Retrieve candidate images along with search result context in parallel
+         client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+         seen_urls = set()
+         
+-        from concurrent.futures import ThreadPoolExecutor, as_completed
++        from concurrent.futures import ThreadPoolExecutor
+         
+         def run_single_search(q):
+             try:
+@@ -576,15 +565,14 @@ Do not include category labels or formatting. Output exactly 5 lines, one query
+ 
+         futures = []
+         with ThreadPoolExecutor(max_workers=5) as executor:
+-            for query in queries[:5]:
++            for query in queries:
+                 futures.append(executor.submit(run_single_search, query))
+                 
+-        for fut in as_completed(futures):
++        for fut in futures:
+             query, res = fut.result()
+             results = res.get("results", [])
+-            print(f"Tavily image search for '{query}' returned {len(results)} search results")
+             
+-            # First, collect images associated with specific results (with context)
++            # Collect images associated with specific results (with context)
+             for r in results:
+                 img_list = r.get("images", [])
+                 for img in img_list:
+@@ -593,12 +581,12 @@ Do not include category labels or formatting. Output exactly 5 lines, one query
+                         candidates.append({
+                             "url": img,
+                             "query": query,
+-                            "source_url": r.get("url"),
++                            "source_url": r.get("url", ""),
+                             "source_title": r.get("title", "Unknown Source"),
+                             "source_context": r.get("content", "")[:250]
+                         })
+             
+-            # Second, collect any remaining general images that didn't map to a specific result
++            # Collect any remaining general images that didn't map to a specific result
+             general_imgs = res.get("images", [])
+             for img in general_imgs:
+                 if img and img.startswith("http") and img not in seen_urls:
+@@ -610,64 +598,71 @@ Do not include category labels or formatting. Output exactly 5 lines, one query
+                         "source_title": "Image Search Result",
+                         "source_context": "Found directly via image search query."
+                     })
++                    
++        # Filter out PNGs and SVGs to avoid transparent logos
++        filtered_candidates = []
++        for c in candidates:
++            url_lower = c["url"].lower()
++            if ".png" in url_lower or ".svg" in url_lower:
++                continue
++            filtered_candidates.append(c)
+                 
+-        # Limit to top 12 candidates for scoring
+-        candidates = candidates[:12]
++        candidates = filtered_candidates
+         if not candidates:
+             return []
+             
+-        # 3. Score and deduplicate candidate images via Gemini using context metadata
+-        scoring_prompt = f"""
+-We are generating a research report on the topic: "{topic}".
+-We have retrieved the following candidate images along with their search queries, source titles, source URLs, and context snippets.
+-
+-Evaluate and score each image on a scale from 0 to 10 based on its relevance, utility, and quality for the report.
+-Calculate the relevance score using:
+-1. Report Topic: Does the image's source title and snippet context align with the report topic?
+-2. Image Title & Metadata: Does the page title and query indicate it's a high-quality relevant illustration (portraits of people, diagrams, timeline infographics)?
+-3. Image Source Context: Evaluate the context snippet. Discard images from irrelevant, desktop setup screenshots, or low-quality contexts.
+-
+-Rules:
+-1. Boost (+3 to +5): Diagrams, infographics, portraits/photos of key people, historical photographs, architecture images.
+-2. Penalize (-5 to -10): Desktop environment screenshots, UI screenshots, window menus, simple plain logos only (unless it is a famous mascot like Tux), watermarked/stock images.
+-3. Deduplicate: If multiple URLs represent the same visual content or key subject, score the duplicates 0 (only keep the best one).
+-
+-Candidate Images:
+-{json.dumps(candidates, indent=2)}
+-
+-Return the results as a JSON array of objects, containing ONLY the "url", "score", and a brief "reason". Order the array by score descending.
+-Return ONLY valid JSON:
+-[
+-  {{"url": "...", "score": 8, "reason": "..."}},
+-  ...
+-]
+-"""
+-        scoring_resp = generate(scoring_prompt).strip()
+-        start = scoring_resp.find("[")
+-        end = scoring_resp.rfind("]")
+-        if start != -1 and end != -1 and end > start:
+-            parsed = json.loads(scoring_resp[start:end+1])
+-            parsed = sorted(parsed, key=lambda x: x.get("score", 0), reverse=True)
+-            final_images = [img["url"] for img in parsed if img.get("score", 0) > 4][:3]
+-            if final_images:
+-                print(f"Successfully scored and selected {len(final_images)} images.")
+-                return final_images
+-
+-    except Exception as e:
+-        print(f"Failed to fetch and score report images: {e}")
++        # 3. Deterministic relevance scoring algorithm
++        topic_lower = topic.lower()
++        authoritative_domains = [
++            'wikipedia.org', 'britannica.com', 'formula1.com', 'f1.com', 
++            'bbc.co.uk', 'reuters.com', 'apnews.com', 'onepiece.fandom.com', 
++            'viz.com', 'nature.com', 'mit.edu', 'stanford.edu', 'arxiv.org', 'nasa.gov'
++        ]
+         
+-    # Fallback deduplication and basic screen/watermark filtering
+-    fallback_images = []
+-    try:
+         for c in candidates:
+             url_lower = c["url"].lower()
+-            if any(x in url_lower for x in ["screenshot", "desktop", "ui", "menu", "watermark"]):
+-                continue
+-            if c["url"] not in fallback_images:
+-                fallback_images.append(c["url"])
+-    except Exception:
+-        pass
+-    return fallback_images[:3]
++            title_lower = c.get("source_title", "").lower()
++            content_lower = c.get("source_context", "").lower()
++            
++            score = 0
++            
++            if topic_lower in title_lower:
++                score += 5
++            if topic_lower in url_lower:
++                score += 3
++            if topic_lower in content_lower:
++                score += 2
++                
++            if any(domain in url_lower for domain in authoritative_domains):
++                score += 2
++                
++            if "pinterest" in url_lower:
++                score -= 5
++            if "reddit" in url_lower:
++                score -= 5
++            if any(domain in url_lower for domain in ['stock', 'getty', 'shutterstock', 'alamy', 'dreamstime', '123rf']):
++                score -= 5
++            if any(domain in url_lower for domain in ['wallpaper', 'background', 'hdwallpapers']):
++                score -= 5
++                
++            unrelated_keywords = ['desktop', 'ui', 'menu', 'watermark', 'avatar', 'icon', 'logo', 'profile', 'earth from space', 'cartoon', 'collage']
++            if any(kw in url_lower or kw in title_lower or kw in content_lower for kw in unrelated_keywords):
++                score -= 10
++                
++            c["heuristic_score"] = score
++            
++        candidates = sorted(candidates, key=lambda x: x["heuristic_score"], reverse=True)
++        
++        final_images = []
++        for c in candidates:
++            if c["url"] not in final_images:
++                final_images.append(c["url"])
++                
++        return final_images[:3]
++
++    except Exception as e:
++        print(f"Deterministic image fetching failed: {e}")
++        return []
+ 
+ 
+ def writer_node(state: ResearchState):

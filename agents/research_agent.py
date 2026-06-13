@@ -54,28 +54,18 @@ Sources:
 
 {formatted_results}
 
-For each source listed above, you MUST write a structured review following this exact format. Do not skip any sections.
+You must write a comprehensive, synthesized academic review report based on the provided papers. Do not summarize them individually.
 
-# [Real Paper Title]
-**Authors**: [Real Authors]
-**Year**: [Real Year]
-**URL**: [Real URL]
-
-## Abstract Summary
-[Write a concise summary of the abstract of the paper based strictly on the provided content]
-
-## Key Contributions
-[Write bullet points of the paper's key contributions and findings]
-
-## Limitations
-[Write a short analysis of the limitations or gaps of this paper based on the content]
-
----
+Your report must cover the following aspects:
+1. Synthesize the key findings, methodologies, and contributions across all the papers.
+2. Compare the different papers, identifying where the approaches or findings agree or diverge.
+3. Identify major emerging trends or future research directions in this academic area.
+4. Identify explicitly any disagreements, conflicts, or debates between the papers.
+5. Identify and analyze the limitations, constraints, or gaps in the current studies or methodologies.
 
 Requirements:
-- You must review every provided paper.
-- Use the real metadata of the paper (Title, Authors, Year, URL). Do not fabricate paper titles, authors, years, or URLs.
-- Cite the paper using its index (e.g. `[1]` for the first paper, `[2]` for the second) at the end of statements. Place citations like `[1]` before periods or punctuation.
+- Cite the papers using inline citation markers (e.g., `[1]`, `[2]`, `[1][3]`) at the end of statements.
+- Synthesize findings and compare papers rather than summarizing them individually.
 - Return valid markdown only.
 """
     else:
