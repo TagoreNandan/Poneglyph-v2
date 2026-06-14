@@ -11,6 +11,71 @@ from graph import graph
 from memory.database import get_history, get_report_by_id, init_db, delete_report_by_id
 from agents.chat_agent import chat_with_report
 
+def calculate_reliability_score(url: str, source_type: str = "web") -> tuple:
+    if not url:
+        return 70, "Corporate Blog"
+    
+    url_lower = url.lower()
+    domain = url_lower.split("://")[-1].split("/")[0].split("?")[0]
+    if domain.startswith("www."):
+        domain = domain[4:]
+        
+    DOMAIN_RELIABILITY = {
+        "openai.com": 95,
+        "anthropic.com": 95,
+        "deepmind.google": 95,
+        "nature.com": 98,
+        "arxiv.org": 90,
+        "reuters.com": 95,
+        "bloomberg.com": 95,
+        "wsj.com": 90,
+        "ft.com": 90,
+        "coursera.org": 80,
+        "github.com": 80,
+        "reddit.com": 45,
+        "youtube.com": 50
+    }
+    
+    reliability = None
+    if domain in DOMAIN_RELIABILITY:
+        reliability = DOMAIN_RELIABILITY[domain]
+    else:
+        for d, r in DOMAIN_RELIABILITY.items():
+            if domain == d or domain.endswith("." + d):
+                reliability = r
+                break
+                
+    if reliability is None:
+        if ".gov" in domain:
+            reliability = 95
+        elif ".edu" in domain or source_type == "arxiv":
+            reliability = 90
+        else:
+            reliability = 70
+            
+    official_domains = ["openai.com", "anthropic.com", "google.com", "microsoft.com", "nvidia.com", "tesla.com", "deepmind.google", "sec.gov"]
+    academic_domains = ["arxiv.org", "nature.com", "science.org", "coursera.org"]
+    news_domains = ["reuters.com", "bloomberg.com", "ft.com", "wsj.com", "cnbc.com", "cnn.com"]
+    tech_domains = ["techcrunch.com", "theverge.com", "wired.com", "github.com"]
+    community_domains = ["medium.com", "substack.com", "reddit.com", "youtube.com"]
+    social_domains = ["instagram.com", "tiktok.com", "facebook.com", "twitter.com", "x.com", "pinterest.com"]
+
+    dom_type = "Community"
+    if any(d in domain for d in official_domains) or ".gov" in domain:
+        dom_type = "Official"
+    elif any(d in domain for d in academic_domains) or ".edu" in domain or source_type == "arxiv":
+        dom_type = "Academic"
+    elif any(d in domain for d in news_domains):
+        dom_type = "Major News"
+    elif any(d in domain for d in tech_domains):
+        dom_type = "Technology Publication"
+    elif any(d in domain for d in community_domains) or any(x in domain for x in ["forum", "forums", "community", "stackexchange", "stackoverflow", "fandom", "quora"]):
+        dom_type = "Community"
+    elif any(d in domain for d in social_domains):
+        dom_type = "Social Media"
+        
+    return reliability, dom_type
+
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, HRFlowable, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
@@ -46,9 +111,9 @@ class PDFRequest(BaseModel):
     report: str
     insights: Dict[str, Any] = {}
     chat_history: List[Dict[str, str]] = []
+    show_citations: bool = False
 
 def download_image_flowable(url: str, max_height: float = 350.0) -> Any:
-    fallback_url = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop"
     try:
         import requests
         import urllib3
@@ -84,16 +149,6 @@ def download_image_flowable(url: str, max_height: float = 350.0) -> Any:
                     pil_img = PILImage.open(BytesIO(resp.content))
             except Exception as download_err:
                 print(f"Failed to download primary image {url}: {download_err}")
-
-        # If primary image failed, load fallback image
-        if not pil_img:
-            print(f"Primary image failed, loading fallback image for PDF: {fallback_url}")
-            try:
-                resp = requests.get(fallback_url, headers=headers, verify=False, timeout=8)
-                if resp.status_code == 200:
-                    pil_img = PILImage.open(BytesIO(resp.content))
-            except Exception as fb_err:
-                print(f"Failed to download fallback image: {fb_err}")
                 
         if pil_img:
             if pil_img.mode not in ("RGB", "RGBA"):
@@ -130,49 +185,95 @@ def download_image_flowable(url: str, max_height: float = 350.0) -> Any:
             return t
     except Exception as e:
         print(f"Failed to download image flowable for {url}: {e}")
-        # Try loading fallback absolute safety
-        try:
-            import requests
-            from io import BytesIO
-            from PIL import Image as PILImage
-            from reportlab.platypus import Image as RLImage, Table, TableStyle
-            resp = requests.get(fallback_url, headers={"User-Agent": "Mozilla/5.0"}, verify=False, timeout=8)
-            if resp.status_code == 200:
-                pil_img = PILImage.open(BytesIO(resp.content))
-                if pil_img.mode not in ("RGB", "RGBA"):
-                    pil_img = pil_img.convert("RGB")
-                width, height = pil_img.size
-                max_width = 400.0
-                if width > max_width:
-                    ratio = max_width / width
-                    width = max_width
-                    height = height * ratio
-                if height > max_height:
-                    ratio = max_height / height
-                    height = max_height
-                    width = width * ratio
-                out_io = BytesIO()
-                pil_img.save(out_io, format="PNG")
-                out_io.seek(0)
-                rl_img = RLImage(out_io, width=width, height=height)
-                t = Table([[rl_img]], colWidths=[width], hAlign='CENTER')
-                t.setStyle(TableStyle([
-                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                    ('LEFTPADDING', (0,0), (-1,-1), 0),
-                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                    ('TOPPADDING', (0,0), (-1,-1), 0),
-                    ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-                ]))
-                return t
-        except Exception as fallback_e:
-            print(f"Failed to load fallback image flowable: {fallback_e}")
     return None
 
-def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
+def clean_report_citations(text: str, num_sources: int) -> str:
+    if not text:
+        return ""
+    import re
+    parts = re.split(r'(\n##? (?:References|Academic Sources)\b)', text, maxsplit=1, flags=re.IGNORECASE)
+    body = parts[0]
+    rest = ""
+    if len(parts) > 1:
+        rest = "".join(parts[1:])
+        
+    def split_comma_citations(match):
+        nums = re.split(r'\s*,\s*', match.group(1))
+        return "".join(f"[{n}]" for n in nums)
+    body = re.sub(r'\[\s*(\d+(?:\s*,\s*\d+)+)\s*\]', split_comma_citations, body)
+    
+    body = re.sub(
+        r'\[\s*#?(?:source[- ]*card|source)[- ]*(\d+)\s*\]',
+        r'[\1]',
+        body,
+        flags=re.IGNORECASE
+    )
+    body = re.sub(
+        r'\(\s*#?(?:source[- ]*card|source)[- ]*(\d+)\s*\)',
+        r'[\1]',
+        body,
+        flags=re.IGNORECASE
+    )
+    
+    def replace_citation(match):
+        num = int(match.group(1))
+        if 1 <= num <= num_sources:
+            return f"[{num}](#source-card-{num})"
+        else:
+            return ""
+            
+    body = re.sub(
+        r'\[\s*(\d+)\s*\](?:\(#source-card-\d+\))?',
+        replace_citation,
+        body
+    )
+    body = re.sub(r'\[#?source[- ]*card[- ]*.*?\]', '', body, flags=re.IGNORECASE)
+    body = re.sub(r'(?<!\])\(#?source[- ]*card[- ]*.*?\)', '', body, flags=re.IGNORECASE)
+    
+    return body + rest
+
+def strip_citations(text: str) -> str:
+    if not text:
+        return ""
+    import re
+    parts = re.split(r'(\n##? (?:References|Academic Sources)\b)', text, maxsplit=1, flags=re.IGNORECASE)
+    body = parts[0]
+    rest = ""
+    if len(parts) > 1:
+        rest = "".join(parts[1:])
+        
+    def split_comma_citations(match):
+        nums = re.split(r'\s*,\s*', match.group(1))
+        return "".join(f"[{n}]" for n in nums)
+    body = re.sub(r'\[\s*(\d+(?:\s*,\s*\d+)+)\s*\]', split_comma_citations, body)
+    
+    body = re.sub(r'\[\s*#?(?:source[- ]*card|source)[- ]*\d+\s*\]', '', body, flags=re.IGNORECASE)
+    body = re.sub(r'\(\s*#?(?:source[- ]*card|source)[- ]*\d+\s*\)', '', body, flags=re.IGNORECASE)
+    body = re.sub(r'\[#?source[- ]*card[- ]*.*?\]', '', body, flags=re.IGNORECASE)
+    body = re.sub(r'(?<!\])\(#?source[- ]*card[- ]*.*?\)', '', body, flags=re.IGNORECASE)
+    body = re.sub(r'\[\s*\d+\s*\](?:\(#source-card-\d+\))?', '', body)
+    
+    body = re.sub(r' +', ' ', body)
+    body = re.sub(r'\s+([.,?!;:])', r'\1', body)
+    return body + rest
+
+def generate_pdf(text: str, insights: Dict[str, Any], show_citations: bool = False) -> io.BytesIO:
     import html
     from datetime import datetime
     
+    route = insights.get("route", "WEB") if (insights and isinstance(insights, dict)) else "WEB"
+    domain = None
+    if insights and isinstance(insights, dict):
+        domain = insights.get("domain")
+    if not domain:
+        route_to_domain = {
+            "ARXIV": "Academic Analysis",
+            "WEB": "General Research",
+            "HYBRID": "Strategic Research",
+            "RAG": "Internal Intelligence"
+        }
+        domain = route_to_domain.get(route, "General Research")
+
     def on_first_page(canvas, doc):
         pass
 
@@ -241,6 +342,13 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
             return f'<a href="{raw_url}" color="#4F46E5"><u>{wrapped_url}</u></a>'
             
         escaped = re.sub(r'(?<![">])(https?://[^\s<]+)', repl_raw_url, escaped)
+        
+        # Allow internal anchors
+        escaped = re.sub(
+            r'&lt;a\s+name=&quot;(source-card-\d+)&quot;&gt;&lt;/a&gt;',
+            r'<a name="\1"></a>',
+            escaped
+        )
         return escaped
 
     def classify_topic(topic: str) -> str:
@@ -364,6 +472,64 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
         spaceAfter=4
     )
     
+    def render_markdown_table(table_lines, base_style):
+        rows_data = []
+        for line in table_lines:
+            line_strip = line.strip()
+            if not line_strip:
+                continue
+            if re.match(r'^\|[\s\-:|]+\|$', line_strip):
+                continue
+            cells = [c.strip() for c in line_strip.split('|')[1:-1]]
+            rows_data.append(cells)
+            
+        if not rows_data:
+            return None
+            
+        num_cols = max(len(row) for row in rows_data)
+        for row in rows_data:
+            while len(row) < num_cols:
+                row.append("")
+                
+        table_content = []
+        header_style = ParagraphStyle(
+            'TableHeaderStyle',
+            parent=base_style,
+            fontName='Helvetica-Bold',
+            textColor=colors.HexColor("#111827")
+        )
+        
+        for i, row in enumerate(rows_data):
+            row_content = []
+            for cell in row:
+                cell_p = Paragraph(clean_for_paragraph(cell), header_style if i == 0 else base_style)
+                row_content.append(cell_p)
+            table_content.append(row_content)
+            
+        col_width = 504.0 / num_cols
+        col_widths = [col_width] * num_cols
+        
+        t = Table(table_content, colWidths=col_widths)
+        
+        t_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#111827")),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
+        ]
+        
+        for r_idx in range(1, len(rows_data)):
+            if r_idx % 2 == 1:
+                t_style.append(('BACKGROUND', (0, r_idx), (-1, r_idx), colors.HexColor("#F9FAFB")))
+                
+        t.setStyle(TableStyle(t_style))
+        return t
+    
     evidence_num_style = ParagraphStyle(
         'EvidenceNum',
         parent=styles['Normal'],
@@ -481,11 +647,34 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
 
     content = []
     
-    # -----------------
-    # PARSE METADATA
-    # -----------------
-    # Standardize citation brackets format
-    text = re.sub(r'(?<!\[)\b(\d+)\](?!\()', r'[\1]', text)
+    num_sources = 0
+    if insights and isinstance(insights, dict):
+        if "sources" in insights and isinstance(insights["sources"], list):
+            num_sources = len(insights["sources"])
+        elif "unique_sources" in insights and isinstance(insights["unique_sources"], int):
+            num_sources = insights["unique_sources"]
+        elif "references_used" in insights and isinstance(insights["references_used"], int):
+            num_sources = insights["references_used"]
+            
+    if not num_sources:
+        in_ref = False
+        for line in text.split("\n"):
+            line_strip = line.strip()
+            if "## References" in line_strip or "## Academic Sources" in line_strip:
+                in_ref = True
+                continue
+            if in_ref:
+                if re.match(r'^\[\d+\]', line_strip):
+                    num_sources += 1
+    if not num_sources:
+        num_sources = 10
+        
+    # Standardize/clean or strip report citations before generation
+    show_citations = show_citations or (insights.get("show_citations", False) if (insights and isinstance(insights, dict)) else False)
+    if show_citations:
+        text = clean_report_citations(text, num_sources)
+    else:
+        text = strip_citations(text)
     
     # Replace legacy branding
     text = text.replace("Platform: ResearchPilot AI", "Platform: Poneglyph Research")
@@ -537,11 +726,12 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
     except Exception:
         pass
 
-    for line in lines:
-        img_match = re.search(r'!\[.*?\]\((.*?)\)', line)
-        if img_match:
-            cover_image_url = img_match.group(1).strip()
-            break
+    report_images = [url.strip() for url in re.findall(r'!\[.*?\]\(((?:[^()]+|\([^()]*\))*)\)', text) if url.strip()]
+    if report_images:
+        cover_image_url = report_images[0]
+    else:
+        cover_image_url = None
+    print(f"Cover image selected: {cover_image_url}")
 
     try:
         dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
@@ -578,8 +768,13 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
     # -----------------
     # COVER PAGE
     # -----------------
+    doc.title = topic
+    doc.subject = domain
+    doc.author = "Poneglyph Intelligence"
+    doc.creator = "Poneglyph Research Hub"
+
     content.append(Spacer(1, 15))
-    content.append(Paragraph("ACADEMIC ANALYSIS", cover_volume_style))
+    content.append(Paragraph(domain.upper(), cover_volume_style))
     content.append(Spacer(1, 15))
     content.append(Paragraph(clean_for_paragraph(topic), cover_title_style))
     content.append(Spacer(1, 25))
@@ -596,7 +791,7 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
     content.append(Paragraph("Poneglyph Intelligence", cover_prep_val_style))
     content.append(Spacer(1, 15))
     
-    classification = classify_topic(topic)
+    classification = domain
     content.append(Paragraph("Research Domain", cover_meta_label_style))
     content.append(Paragraph(classification, cover_meta_val_style))
     content.append(Spacer(1, 10))
@@ -622,9 +817,20 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
     # Track scanner status to skip legacy headers block (e.g. topic, generated on)
     in_legacy_header = True
     
+    table_lines = []
+    in_table = False
+
     for line in lines:
         line_strip = line.strip()
         if not line_strip:
+            if in_table:
+                table_flowable = render_markdown_table(table_lines, body_style)
+                if table_flowable:
+                    content.append(Spacer(1, 6))
+                    content.append(table_flowable)
+                    content.append(Spacer(1, 6))
+                table_lines = []
+                in_table = False
             continue
             
         if in_legacy_header:
@@ -632,13 +838,27 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
                 in_legacy_header = False
                 continue
             # Fallback if there is no horizontal rule but we hit the actual content:
-            if line_strip.startswith("#") and any(h in line_strip.lower() for h in ["executive summary", "introduction", "abstract", "key findings", "summary"]):
+            if line_strip.startswith("#") and any(h in line_strip.lower() for h in ["executive summary", "introduction", "abstract", "key findings", "summary", "comparison", "executive comparison"]):
                 in_legacy_header = False
                 # Do NOT continue, we want to process this header!
             else:
                 continue
             
-        img_match = re.search(r'!\[.*?\]\((.*?)\)', line_strip)
+        # Check if table
+        if line_strip.startswith("|") and line_strip.endswith("|"):
+            in_table = True
+            table_lines.append(line_strip)
+            continue
+        elif in_table:
+            table_flowable = render_markdown_table(table_lines, body_style)
+            if table_flowable:
+                content.append(Spacer(1, 6))
+                content.append(table_flowable)
+                content.append(Spacer(1, 6))
+            table_lines = []
+            in_table = False
+
+        img_match = re.search(r'!\[.*?\]\(((?:[^()]+|\([^()]*\))*)\)', line_strip)
         if img_match:
             img_url = img_match.group(1).strip()
             # De-duplicate: skip rendering the first image since it was featured on the cover page
@@ -660,11 +880,20 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
             heading_text = "Academic Sources" if "Academic Sources" in line_strip else "References"
             content.append(Paragraph(heading_text, h1_style))
             content.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#E5E7EB"), spaceAfter=8))
+            
+            # Inject hidden fallback anchors for all possible source indexes to prevent ReportLab crashes
+            anchors_html = "".join(f'<a name="source-card-{i}"></a>' for i in range(1, num_sources + 1))
+            if anchors_html:
+                content.append(Paragraph(anchors_html, body_style))
             continue
             
         # Standardize reference prefix bracket formatting if in references section
         if in_references:
             line_strip = re.sub(r'^(\d+)\]\s*', r'[\1] ', line_strip)
+            m = re.match(r'^\[(\d+)\]', line_strip)
+            if m:
+                idx = m.group(1)
+                line_strip = f'<a name="source-card-{idx}"></a>' + line_strip
 
         if line_strip.startswith("# "):
             title_text = line_strip.replace("# ", "").strip()
@@ -693,6 +922,13 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
         else:
             content.append(Paragraph(clean_for_paragraph(line_strip), body_style))
             
+    if in_table:
+        table_flowable = render_markdown_table(table_lines, body_style)
+        if table_flowable:
+            content.append(Spacer(1, 6))
+            content.append(table_flowable)
+            content.append(Spacer(1, 6))
+            
     # -----------------
     # EVIDENCE APPENDIX PAGE
     # -----------------
@@ -710,10 +946,11 @@ def generate_pdf(text: str, insights: Dict[str, Any]) -> io.BytesIO:
             excerpt = ev.get("excerpt", "")
             url = ev.get("url", "")
             
+            score, dom_type = calculate_reliability_score(url, "arxiv" if route == "ARXIV" else "web")
             content.append(Paragraph(f"[{idx}]", evidence_num_style))
             content.append(Paragraph(clean_for_paragraph(title), evidence_title_style))
             content.append(Paragraph(f'"{clean_for_paragraph(excerpt)}"', evidence_text_style))
-            content.append(Paragraph(f"Reference URL:<br/>{clean_for_paragraph(url)}", evidence_url_style))
+            content.append(Paragraph(f"Reference URL:<br/>{clean_for_paragraph(url)}<br/>Reliability Score: {score} ({dom_type})", evidence_url_style))
             content.append(Spacer(1, 4))
 
     # -----------------
@@ -793,14 +1030,37 @@ def run_research(req: ResearchRequest):
     try:
         result = graph.invoke({"query": req.query, "bypass_ambiguity": req.bypass_ambiguity})
         print(f"DIAGNOSTIC: Report generated successfully [Query: {req.query}]")
+        
+        insights = result.get("insights", {})
+        if isinstance(insights, dict):
+            insights["route"] = result.get("route", "WEB")
+            
+        hero_image = None
+        if insights and isinstance(insights, dict) and insights.get("hero_image"):
+            hero_image = insights["hero_image"]
+        if not hero_image:
+            import re
+            img_urls = re.findall(r'!\[.*?\]\(((?:[^()]+|\([^()]*\))*)\)', result.get("formatted_report", ""))
+            if img_urls:
+                hero_image = img_urls[0]
+
+        # Requirement 1: Log API_HERO
+        print(f"API_HERO: {hero_image}")
+
+        # Clean report body citations dynamically before returning
+        report_text = result.get("formatted_report", "")
+        sources_list = result.get("sources", [])
+        clean_text = clean_report_citations(report_text, len(sources_list))
+
         return {
             "needs_clarification": result.get("needs_clarification", False),
             "clarification_options": result.get("clarification_options", []),
-            "formatted_report": result.get("formatted_report", ""),
-            "insights": result.get("insights", {}),
-            "sources": result.get("sources", []),
+            "formatted_report": clean_text,
+            "insights": insights,
+            "sources": sources_list,
             "route": result.get("route", "Unknown"),
-            "activity_log": result.get("activity_log", [])
+            "activity_log": result.get("activity_log", []),
+            "hero_image": hero_image
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -811,11 +1071,15 @@ def get_research_history():
     history = get_history()
     formatted_history = []
     for item in history:
+        domain_val = item[4] if len(item) > 4 and item[4] else None
+        if not domain_val:
+            domain_val = "General Research"
         formatted_history.append({
             "id": item[0],
             "title": item[1],
             "route": item[2] if len(item) > 2 else "WEB",
-            "timestamp": item[3] if len(item) > 3 else None
+            "timestamp": item[3] if len(item) > 3 else None,
+            "domain": domain_val
         })
     return formatted_history
 
@@ -839,14 +1103,47 @@ def get_report(report_id: int):
         except Exception:
             pass
 
+    domain_val = report[8] if len(report) > 8 and report[8] else None
+    if not domain_val:
+        domain_val = insights.get("domain") or "General Research"
+
+    if isinstance(insights, dict):
+        insights["route"] = report[2]
+        insights["domain"] = domain_val
+
+    hero_image = None
+    if len(report) > 7 and report[7]:
+        hero_image = report[7]
+        
+    # Requirement 7: If hero image is unavailable, use first valid supporting image
+    if not hero_image:
+        if insights and isinstance(insights, dict) and insights.get("hero_image"):
+            hero_image = insights["hero_image"]
+        elif insights and isinstance(insights, dict) and insights.get("images"):
+            imgs = insights.get("images")
+            if imgs and len(imgs) > 0:
+                hero_image = imgs[0]
+        else:
+            import re
+            img_urls = re.findall(r'!\[.*?\]\(((?:[^()]+|\([^()]*\))*)\)', report[3] or "")
+            if img_urls:
+                hero_image = img_urls[0]
+
+    # Requirement 1: Log API_HERO
+    print(f"API_HERO: {hero_image}")
+
+    # Clean report content citations dynamically before returning
+    cleaned_content = clean_report_citations(report[3] or "", len(sources))
+
     return {
         "id": report[0],
         "title": report[1],
         "route": report[2],
-        "content": report[3],
+        "content": cleaned_content,
         "timestamp": report[4],
         "sources": sources,
-        "insights": insights
+        "insights": insights,
+        "hero_image": hero_image
     }
 
 @app.delete("/api/report/{report_id}")
@@ -898,7 +1195,7 @@ def validate_pdf_data(text: str, insights: Dict[str, Any]) -> str:
     if re.search(r'Page\s+\[\d+(?!\s*\])', text):
         return "Malformed references format (broken unclosed bracket) found."
         
-    img_urls = re.findall(r'!\[.*?\]\((.*?)\)', text)
+    img_urls = re.findall(r'!\[.*?\]\(((?:[^()]+|\([^()]*\))*)\)', text)
     for url in img_urls:
         if not url.strip():
             return "Empty image container URL found in report content."
@@ -920,7 +1217,7 @@ def export_pdf(req: PDFRequest):
             print(f"PDF Quality Audit Aborted: {val_error}")
             raise HTTPException(status_code=400, detail=f"PDF Quality Audit Failed: {val_error}")
             
-        buffer = generate_pdf(req.report, req.insights)
+        buffer = generate_pdf(req.report, req.insights, show_citations=req.show_citations)
         return StreamingResponse(
             buffer, 
             media_type="application/pdf",
@@ -930,3 +1227,13 @@ def export_pdf(req: PDFRequest):
         raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/diagnostics/image-selection")
+def get_image_selection_diagnostics(topic: str):
+    try:
+        from graph import get_image_diagnostics
+        diag = get_image_diagnostics(topic)
+        return diag
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

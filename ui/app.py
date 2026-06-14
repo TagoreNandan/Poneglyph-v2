@@ -93,7 +93,99 @@ def download_image_flowable(url: str):
         print(f"Failed to download image flowable for {url}: {e}")
     return None
 
-def generate_pdf(text, insights):
+def clean_report_citations(text: str, num_sources: int) -> str:
+    if not text:
+        return ""
+    import re
+    parts = re.split(r'(\n##? (?:References|Academic Sources)\b)', text, maxsplit=1, flags=re.IGNORECASE)
+    body = parts[0]
+    rest = ""
+    if len(parts) > 1:
+        rest = "".join(parts[1:])
+        
+    def split_comma_citations(match):
+        nums = re.split(r'\s*,\s*', match.group(1))
+        return "".join(f"[{n}]" for n in nums)
+    body = re.sub(r'\[\s*(\d+(?:\s*,\s*\d+)+)\s*\]', split_comma_citations, body)
+    
+    body = re.sub(
+        r'\[\s*#?(?:source[- ]*card|source)[- ]*(\d+)\s*\]',
+        r'[\1]',
+        body,
+        flags=re.IGNORECASE
+    )
+    body = re.sub(
+        r'\(\s*#?(?:source[- ]*card|source)[- ]*(\d+)\s*\)',
+        r'[\1]',
+        body,
+        flags=re.IGNORECASE
+    )
+    
+    def replace_citation(match):
+        num = int(match.group(1))
+        if 1 <= num <= num_sources:
+            return f"[{num}](#source-card-{num})"
+        else:
+            return ""
+            
+    body = re.sub(
+        r'\[\s*(\d+)\s*\](?:\(#source-card-\d+\))?',
+        replace_citation,
+        body
+    )
+    body = re.sub(r'\[#?source[- ]*card[- ]*.*?\]', '', body, flags=re.IGNORECASE)
+    body = re.sub(r'(?<!\])\(#?source[- ]*card[- ]*.*?\)', '', body, flags=re.IGNORECASE)
+    
+    return body + rest
+
+def strip_citations(text: str) -> str:
+    if not text:
+        return ""
+    import re
+    parts = re.split(r'(\n##? (?:References|Academic Sources)\b)', text, maxsplit=1, flags=re.IGNORECASE)
+    body = parts[0]
+    rest = ""
+    if len(parts) > 1:
+        rest = "".join(parts[1:])
+        
+    def split_comma_citations(match):
+        nums = re.split(r'\s*,\s*', match.group(1))
+        return "".join(f"[{n}]" for n in nums)
+    body = re.sub(r'\[\s*(\d+(?:\s*,\s*\d+)+)\s*\]', split_comma_citations, body)
+    
+    body = re.sub(r'\[\s*#?(?:source[- ]*card|source)[- ]*\d+\s*\]', '', body, flags=re.IGNORECASE)
+    body = re.sub(r'\(\s*#?(?:source[- ]*card|source)[- ]*\d+\s*\)', '', body, flags=re.IGNORECASE)
+    body = re.sub(r'\[#?source[- ]*card[- ]*.*?\]', '', body, flags=re.IGNORECASE)
+    body = re.sub(r'(?<!\])\(#?source[- ]*card[- ]*.*?\)', '', body, flags=re.IGNORECASE)
+    body = re.sub(r'\[\s*\d+\s*\](?:\(#source-card-\d+\))?', '', body)
+    
+    body = re.sub(r' +', ' ', body)
+    body = re.sub(r'\s+([.,?!;:])', r'\1', body)
+    return body + rest
+
+def generate_pdf(text, insights, show_citations=False):
+    import re
+    num_sources = 0
+    if insights and isinstance(insights, dict):
+        num_sources = insights.get("unique_sources") or insights.get("references_used") or 0
+    if not num_sources:
+        in_ref = False
+        for line in text.split("\n"):
+            line_strip = line.strip()
+            if "## References" in line_strip or "## Academic Sources" in line_strip:
+                in_ref = True
+                continue
+            if in_ref:
+                if re.match(r'^\[\d+\]', line_strip):
+                    num_sources += 1
+    if not num_sources:
+        num_sources = 10
+        
+    show_citations = show_citations or (insights.get("show_citations", False) if (insights and isinstance(insights, dict)) else False)
+    if show_citations:
+        text = clean_report_citations(text, num_sources)
+    else:
+        text = strip_citations(text)
 
     buffer = BytesIO()
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Search, Archive, Folder, Settings, Download, FileText, Activity, AlertCircle, ArrowRight, MessageSquare, Loader, X, ExternalLink, ChevronRight, HelpCircle, ShieldAlert, Trash2 } from 'lucide-react';
+import remarkGfm from 'remark-gfm';
+import { Search, Archive, Folder, Settings, Download, FileText, Activity, AlertCircle, ArrowRight, MessageSquare, Loader, X, ExternalLink, ChevronRight, HelpCircle, ShieldAlert, Trash2, Eye, EyeOff } from 'lucide-react';
 import { fetchHistory, fetchReport, generateResearch, sendChat, downloadPDF, deleteReportApi } from './api';
 import './index.css';
 
@@ -208,6 +209,7 @@ function App() {
 
   const [activeReport, setActiveReport] = useState(null);
   const [activeReportId, setActiveReportId] = useState(null);
+  const [activeHeroImage, setActiveHeroImage] = useState(null);
   const [route, setRoute] = useState(null);
   const [activityLog, setActivityLog] = useState([]);
   const [activeTopic, setActiveTopic] = useState('');
@@ -216,6 +218,7 @@ function App() {
   const [insights, setInsights] = useState(null);
   const [sources, setSources] = useState([]);
   const [error, setError] = useState(null);
+  const [highlightedSourceId, setHighlightedSourceId] = useState(null);
   
   // Navigation
   const [activeNav, setActiveNav] = useState('archives');
@@ -251,6 +254,7 @@ function App() {
         setActiveNav(state.activeNav ?? 'archives');
         setActiveReport(state.activeReport ?? null);
         setActiveReportId(state.activeReportId ?? null);
+        setActiveHeroImage(state.activeHeroImage ?? null);
         setActiveTopic(state.activeTopic ?? '');
         setRoute(state.route ?? null);
         setInsights(state.insights ?? null);
@@ -261,6 +265,7 @@ function App() {
         setActiveNav('archives');
         setActiveReport(null);
         setActiveReportId(null);
+        setActiveHeroImage(null);
         setActiveTopic('');
         setRoute(null);
         setInsights(null);
@@ -282,7 +287,8 @@ function App() {
         insights: null,
         sources: [],
         selectedCollection: null,
-        timestamp: ''
+        timestamp: '',
+        activeHeroImage: null
       }, "");
     }
 
@@ -328,6 +334,8 @@ function App() {
 
   // Scroll progress tracker
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [disputedCollapsed, setDisputedCollapsed] = useState(true);
+  const [showCitations, setShowCitations] = useState(true);
 
   const chatEndRef = useRef(null);
 
@@ -459,6 +467,7 @@ function App() {
       setRoute(data.route || null);
       setActivityLog(data.activity_log || []);
       setActiveTopic(q);
+      setActiveHeroImage(data.hero_image || null);
       
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -473,7 +482,8 @@ function App() {
         insights: data.insights || null,
         sources: data.sources || [],
         selectedCollection: selectedCollection,
-        timestamp: timeStr
+        timestamp: timeStr,
+        activeHeroImage: data.hero_image || null
       }, "");
       
       loadHistory();
@@ -507,6 +517,7 @@ function App() {
       setTimestamp(newTimestamp);
       setSources(report.sources || []);
       setChatHistory([]);
+      setActiveHeroImage(report.hero_image || null);
       
       window.history.pushState({
         activeNav: nextNav,
@@ -517,7 +528,8 @@ function App() {
         insights: report.insights || null,
         sources: report.sources || [],
         selectedCollection: selectedCollection,
-        timestamp: newTimestamp
+        timestamp: newTimestamp,
+        activeHeroImage: report.hero_image || null
       }, "");
     } catch (err) {
       console.error(err);
@@ -545,6 +557,7 @@ function App() {
       setTimestamp("June 8, 2026");
       setSources(report.sources);
       setChatHistory([]);
+      setActiveHeroImage(null);
       
       window.history.pushState({
         activeNav: 'archives',
@@ -555,7 +568,8 @@ function App() {
         insights: report.insights,
         sources: report.sources,
         selectedCollection: selectedCollection,
-        timestamp: "June 8, 2026"
+        timestamp: "June 8, 2026",
+        activeHeroImage: null
       }, "");
     } else {
       handleSelectHistory(showcaseReportId);
@@ -566,6 +580,7 @@ function App() {
     setActiveNav(nav);
     setActiveReport(null);
     setActiveReportId(null);
+    setActiveHeroImage(null);
     setError(null);
     window.history.pushState({
       activeNav: nav,
@@ -576,12 +591,14 @@ function App() {
       insights: null,
       sources: [],
       selectedCollection: null,
-      timestamp: ''
+      timestamp: '',
+      activeHeroImage: null
     }, "");
   };
 
   const handleSelectCollection = (name) => {
     setSelectedCollection(name);
+    setActiveHeroImage(null);
     window.history.pushState({
       activeNav: 'collections',
       activeReportId: null,
@@ -591,13 +608,15 @@ function App() {
       insights: null,
       sources: [],
       selectedCollection: name,
-      timestamp: ''
+      timestamp: '',
+      activeHeroImage: null
     }, "");
   };
 
   const handleNewSearch = () => {
     setActiveReport(null);
     setActiveReportId(null);
+    setActiveHeroImage(null);
     setQuery('');
     setError(null);
     setActiveNav('archives');
@@ -610,7 +629,8 @@ function App() {
       insights: null,
       sources: [],
       selectedCollection: null,
-      timestamp: ''
+      timestamp: '',
+      activeHeroImage: null
     }, "");
     setTimeout(() => {
       searchInputRef.current?.focus();
@@ -681,6 +701,99 @@ function App() {
       return domain.replace('www.', '');
     } catch {
       return 'Knowledge Base';
+    }
+  };
+
+  const getTrustScoreAndType = (url, route) => {
+    if (!url) {
+      return { score: 70, type: 'Corporate Blog' };
+    }
+    const urlLower = url.toLowerCase();
+    let domain = '';
+    try {
+      domain = new URL(url).hostname;
+    } catch {
+      domain = urlLower.split("://").pop().split("/")[0].split("?")[0];
+    }
+    if (domain.startsWith("www.")) {
+      domain = domain.substring(4);
+    }
+
+    const DOMAIN_RELIABILITY = {
+      "openai.com": 95,
+      "anthropic.com": 95,
+      "deepmind.google": 95,
+      "nature.com": 98,
+      "arxiv.org": 90,
+      "reuters.com": 95,
+      "bloomberg.com": 95,
+      "wsj.com": 90,
+      "ft.com": 90,
+      "coursera.org": 80,
+      "github.com": 80,
+      "reddit.com": 45,
+      "youtube.com": 50
+    };
+
+    let score = null;
+    if (DOMAIN_RELIABILITY[domain] !== undefined) {
+      score = DOMAIN_RELIABILITY[domain];
+    } else {
+      for (const [d, s] of Object.entries(DOMAIN_RELIABILITY)) {
+        if (domain === d || domain.endsWith("." + d)) {
+          score = s;
+          break;
+        }
+      }
+    }
+
+    if (score === null) {
+      if (domain.includes(".gov")) {
+        score = 95;
+      } else if (route === 'ARXIV' || domain.includes('arxiv.org') || domain.includes('.edu')) {
+        score = 90;
+      } else {
+        score = 70;
+      }
+    }
+
+    const officialDomains = ["openai.com", "anthropic.com", "google.com", "microsoft.com", "nvidia.com", "tesla.com", "deepmind.google", "sec.gov"];
+    const academicDomains = ["arxiv.org", "nature.com", "science.org", "coursera.org"];
+    const newsDomains = ["reuters.com", "bloomberg.com", "ft.com", "wsj.com", "cnbc.com", "cnn.com"];
+    const techDomains = ["techcrunch.com", "theverge.com", "wired.com", "github.com"];
+    const communityDomains = ["medium.com", "substack.com", "reddit.com", "youtube.com"];
+    const socialDomains = ["instagram.com", "tiktok.com", "facebook.com", "twitter.com", "x.com", "pinterest.com"];
+
+    let type = "Community";
+    if (officialDomains.some(d => domain === d || domain.endsWith("." + d)) || domain.includes(".gov")) {
+      type = "Official";
+    } else if (academicDomains.some(d => domain === d || domain.endsWith("." + d)) || domain.includes(".edu") || route === 'ARXIV') {
+      type = "Academic";
+    } else if (newsDomains.some(d => domain === d || domain.endsWith("." + d))) {
+      type = "Major News";
+    } else if (techDomains.some(d => domain === d || domain.endsWith("." + d))) {
+      type = "Technology Publication";
+    } else if (communityDomains.some(d => domain === d || domain.endsWith("." + d)) || 
+               ["forum", "forums", "community", "stackexchange", "stackoverflow", "fandom", "quora"].some(x => domain.includes(x))) {
+      type = "Community";
+    } else if (socialDomains.some(d => domain === d || domain.endsWith("." + d))) {
+      type = "Social Media";
+    } else {
+      type = "Community";
+    }
+
+    return { score, type };
+  };
+
+  const handleCitationClick = (citationNum) => {
+    const targetId = `source-card-${citationNum}`;
+    const element = document.getElementById(targetId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedSourceId(citationNum);
+      setTimeout(() => {
+        setHighlightedSourceId(prev => prev === citationNum ? null : prev);
+      }, 2500);
     }
   };
 
@@ -1265,7 +1378,7 @@ function App() {
                   &larr; Back
                 </button>
                 <span className="report-category-tag">
-                  {route === 'ARXIV' ? 'ACADEMIC ANALYSIS VOL. VII' : 'ECONOMIC ANALYSIS VOL. IV'}
+                  {(insights?.domain || 'General Research').toUpperCase()}
                 </span>
                 <h1 className="report-header-title">{reportData.topic || activeTopic}</h1>
                 <div className="report-header-date">
@@ -1273,21 +1386,28 @@ function App() {
                 </div>
 
                 {/* Suppressed raw inline images - render one hero image at the top */}
-                {reportData.images && reportData.images.length > 0 && (
-                  <img 
-                    src={reportData.images[0]} 
-                    className="report-hero-image" 
-                    alt="Research Hero Illustration" 
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop";
-                    }}
-                  />
-                )}
+                {(() => {
+                  const heroImageToRender = activeHeroImage || (reportData.images && reportData.images.length > 0 ? reportData.images[0] : null);
+                  console.log("RENDER_HERO:", heroImageToRender);
+                  if (!heroImageToRender) return null;
+                  return (
+                    <img 
+                      src={heroImageToRender} 
+                      className="report-hero-image" 
+                      alt="Research Hero Illustration" 
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop";
+                      }}
+                    />
+                  );
+                })()}
 
                 {/* Main report body text (images are hidden, citations custom-rendered) */}
                 <div className="report-body-content">
                   <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
                     components={{
                       img: () => null, // Suppress raw markdown images inline
                       a: ({ href, children }) => {
@@ -1295,43 +1415,88 @@ function App() {
                         const text = String(children);
                         const isCitation = /^[\[]?\d+[\]]?$/.test(text);
                         if (isCitation) {
+                          if (!showCitations) {
+                            return null;
+                          }
                           const num = text.replace(/[\[\]]/g, '');
+                          const citationNum = parseInt(num, 10);
+                          const source = sources && sources[citationNum - 1];
+                          const sourceTitle = source ? (source.title || 'Source Link') : 'Source Link';
+                          const sourceUrl = source ? (source.url || source) : href;
+                          const sourceDomain = extractDomain(sourceUrl);
                           return (
-                            <a 
-                              href={href} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="citation-inline-badge"
-                            >
-                              {num.padStart(2, '0')}
-                            </a>
+                            <span className="citation-badge-container">
+                              <a 
+                                href={href}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleCitationClick(citationNum);
+                                }}
+                                className="citation-inline-badge"
+                              >
+                                {num.padStart(2, '0')}
+                              </a>
+                              <span className="citation-tooltip">
+                                <strong className="tooltip-title">{sourceTitle}</strong>
+                                <span className="tooltip-domain">{sourceDomain}</span>
+                              </span>
+                            </span>
                           );
                         }
                         return <a href={href} target="_blank" rel="noreferrer">{children}</a>;
                       }
                     }}
                   >
-                    {reportData.body}
+                    {(() => {
+                      if (!reportData.body) return '';
+                      let bodyText = reportData.body;
+                      if (!showCitations) {
+                        // Standardize/normalize bracket commas first, e.g. [1, 2] -> [1][2]
+                        bodyText = bodyText.replace(/\[\s*(\d+(?:\s*,\s*\d+)+)\s*\]/g, (match, p1) => {
+                          const nums = p1.split(/\s*,\s*/);
+                          return nums.map(n => `[${n}]`).join('');
+                        });
+                        // Remove all citation tags
+                        bodyText = bodyText.replace(/\[\s*#?(?:source[- ]*card|source)[- ]*\d+\s*\]/gi, '');
+                        bodyText = bodyText.replace(/\(\s*#?(?:source[- ]*card|source)[- ]*\d+\s*\)/gi, '');
+                        bodyText = bodyText.replace(/\[#?source[- ]*card[- ]*.*?\]/gi, '');
+                        bodyText = bodyText.replace(/(?<!\])\(#?source[- ]*card[- ]*.*?\)/gi, '');
+                        bodyText = bodyText.replace(/\[\s*\d+\s*\](?:\(#source-card-\d+\))?/g, '');
+                        // Clean up spaces before punctuation and double spaces
+                        bodyText = bodyText.replace(/ +/g, ' ');
+                        bodyText = bodyText.replace(/\s+([.,?!;:-])/g, '$1');
+                      } else {
+                        // Standardize to Markdown link for ReactMarkdown to pick up
+                        bodyText = bodyText.replace(/\[(\d+)\](?!\()/g, '$&(#source-card-$1)');
+                      }
+                      return bodyText;
+                    })()}
                   </ReactMarkdown>
                 </div>
 
                 {/* Render additional images as a neat 2-column gallery grid at the bottom */}
-                {reportData.images && reportData.images.length > 1 && (
-                  <div className="report-gallery-grid">
-                    {reportData.images.slice(1).map((imgUrl, i) => (
-                      <img 
-                        key={i} 
-                        src={imgUrl} 
-                        className="report-gallery-image" 
-                        alt={`Additional research evidence ${i + 1}`} 
-                        onError={(e) => {
-                          e.target.onerror = null;
-                          e.target.src = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop";
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
+                {(() => {
+                  const heroImageToRender = activeHeroImage || (reportData.images && reportData.images.length > 0 ? reportData.images[0] : null);
+                  const galleryImages = reportData.images ? reportData.images.filter(img => img !== heroImageToRender) : [];
+                  if (galleryImages.length === 0) return null;
+                  return (
+                    <div className="report-gallery-grid">
+                      {galleryImages.map((imgUrl, i) => (
+                        <img 
+                          key={i} 
+                          src={imgUrl} 
+                          className="report-gallery-image" 
+                          alt={`Additional research evidence ${i + 1}`} 
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop";
+                          }}
+                        />
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* Report References at the bottom */}
                 {reportData.references && (
@@ -1389,6 +1554,13 @@ function App() {
                     <Download size={16} /> Export PDF Report
                   </button>
                   <button 
+                    className="pdf-export-btn"
+                    onClick={() => setShowCitations(!showCitations)}
+                  >
+                    {showCitations ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {showCitations ? 'Hide Citations' : 'Show Citations'}
+                  </button>
+                  <button 
                     className="chat-toggle-btn"
                     onClick={() => setChatOpen(true)}
                   >
@@ -1437,6 +1609,124 @@ function App() {
                   </div>
                 )}
 
+                {/* Claim Verification Panel */}
+                {insights?.verified_claims?.length > 0 && (
+                  <div className="rail-panel">
+                    <h5 className="rail-panel-title">Verification Summary</h5>
+                    <div className="compact-stats-container" style={{ margin: '8px 0 16px 0' }}>
+                      <div className="compact-stat-row">
+                        <span className="compact-stat-lbl">Supported</span>
+                        <span className="compact-stat-val" style={{ color: '#10B981', fontWeight: 'bold' }}>
+                          {insights.verified_claims.filter(c => c.status === 'SUPPORTED').length}
+                        </span>
+                      </div>
+                      <div className="compact-stat-row">
+                        <span className="compact-stat-lbl">Weak</span>
+                        <span className="compact-stat-val" style={{ color: '#F59E0B', fontWeight: 'bold' }}>
+                          {insights.verified_claims.filter(c => c.status === 'WEAK').length}
+                        </span>
+                      </div>
+                      <div className="compact-stat-row">
+                        <span className="compact-stat-lbl">Disputed</span>
+                        <span className="compact-stat-val" style={{ color: '#EF4444', fontWeight: 'bold' }}>
+                          {insights.verified_claims.filter(c => c.status === 'DISPUTED').length}
+                        </span>
+                      </div>
+                      <div className="compact-stat-row">
+                        <span className="compact-stat-lbl">Unverified</span>
+                        <span className="compact-stat-val" style={{ color: '#6B7280', fontWeight: 'bold' }}>
+                          {insights.verified_claims.filter(c => c.status === 'UNVERIFIED').length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Collapsible Disputed Claims */}
+                    {insights.verified_claims.filter(c => c.status === 'DISPUTED').length > 0 && (
+                      <div style={{ marginBottom: '16px', border: '1px solid var(--outline)', padding: '10px', background: 'var(--surface-container-lowest)' }}>
+                        <div 
+                          onClick={() => setDisputedCollapsed(!disputedCollapsed)}
+                          style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center', 
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            color: '#EF4444'
+                          }}
+                        >
+                          <span>Disputed Claims ({insights.verified_claims.filter(c => c.status === 'DISPUTED').length})</span>
+                          <span>{disputedCollapsed ? 'Expand +' : 'Collapse -'}</span>
+                        </div>
+                        
+                        {!disputedCollapsed && (
+                          <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {insights.verified_claims.filter(c => c.status === 'DISPUTED').map((dc, i) => (
+                              <div key={i} style={{ borderBottom: '1px solid var(--outline)', paddingBottom: '8px' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--on-background)' }}>"{dc.claim}"</div>
+                                <div style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '4px', fontStyle: 'italic' }}>
+                                  Evidence: {dc.evidence?.join('; ') || 'No contradicting evidence cited.'}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Verified Claims Detail Cards with badges */}
+                    <h6 style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px', color: 'var(--on-surface-variant)' }}>Claims Detail</h6>
+                    <div className="rail-cards-list">
+                      {insights.verified_claims.map((vc, i) => {
+                        let badgeBg = '#6B7280';
+                        if (vc.status === 'SUPPORTED') badgeBg = '#10B981';
+                        else if (vc.status === 'WEAK') badgeBg = '#F59E0B';
+                        else if (vc.status === 'DISPUTED') badgeBg = '#EF4444';
+                        
+                        return (
+                          <div key={i} className="rail-evidence-card" style={{ padding: '10px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                              <span 
+                                style={{ 
+                                  fontSize: '9px', 
+                                  fontWeight: 'bold', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '4px', 
+                                  color: '#FFFFFF',
+                                  backgroundColor: badgeBg
+                                }}
+                              >
+                                {vc.status}
+                              </span>
+                            </div>
+                            <div className="rail-evidence-text" style={{ fontSize: '11.5px', lineHeight: '1.4' }}>
+                              "{vc.claim}"
+                            </div>
+                            {vc.evidence?.length > 0 && (
+                              <div style={{ fontSize: '10.5px', color: 'var(--on-surface-variant)', fontStyle: 'italic', marginTop: '6px' }}>
+                                Evidence: "{vc.evidence[0]}"
+                              </div>
+                            )}
+                            {vc.sources?.length > 0 && (
+                              <div style={{ fontSize: '10.5px', color: 'var(--on-surface-variant)', marginTop: '6px', borderTop: '1px solid var(--outline)', paddingTop: '6px' }}>
+                                <span>Verification Source: </span>
+                                <a href={vc.sources[0].url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
+                                  {vc.sources[0].title || 'Source'}
+                                </a>
+                                {(() => {
+                                  const { score, type } = getTrustScoreAndType(vc.sources[0].url, insights?.route);
+                                  return <span> | <strong>Trust Score: {score}</strong> ({type})</span>;
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Supporting Excerpts Evidence Cards list */}
                 {insights?.evidence_panel?.length > 0 && (
                   <div className="rail-panel">
@@ -1474,21 +1764,29 @@ function App() {
                   <div className="rail-panel">
                     <h5 className="rail-panel-title">Cited Sources</h5>
                     <div className="rail-cards-list">
-                      {sources.map((source, i) => (
-                        <a 
-                          key={i} 
-                          href={source.url || source} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          className="rail-source-card"
-                        >
-                          <div className="rail-source-info">
-                            <span className="rail-source-title">{source.title || extractDomain(source.url || source)}</span>
-                            <span className="rail-source-domain">{source.url || source}</span>
-                          </div>
-                          <ChevronRight size={14} style={{ color: 'var(--on-surface-variant)', flexShrink: 0 }} />
-                        </a>
-                      ))}
+                      {sources.map((source, i) => {
+                        const url = source.url || source;
+                        const { score, type } = getTrustScoreAndType(url, insights?.route);
+                        return (
+                          <a 
+                            key={i} 
+                            id={`source-card-${i + 1}`}
+                            href={url} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className={`rail-source-card ${highlightedSourceId === i + 1 ? 'highlighted' : ''}`}
+                          >
+                            <div className="rail-source-info">
+                              <span className="rail-source-title">{source.title || extractDomain(url)}</span>
+                              <span className="rail-source-domain">{url}</span>
+                              <span className="rail-source-score" style={{ fontSize: '10.5px', color: 'var(--on-surface-variant)', marginTop: '4px', opacity: 0.85 }}>
+                                Trust Score: {score} • Type: {type}
+                              </span>
+                            </div>
+                            <ChevronRight size={14} style={{ color: 'var(--on-surface-variant)', flexShrink: 0 }} />
+                          </a>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

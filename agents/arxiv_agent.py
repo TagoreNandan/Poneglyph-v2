@@ -9,7 +9,14 @@ ARXiv expects technical terms, key mathematical concepts, or scientific methodol
 Do not include any numbering, quotes, or category labels. Output exactly 2 queries, one per line.
 """
     try:
-        response = gemini_generate(prompt).strip()
+        try:
+            response = gemini_generate(prompt).strip()
+        except Exception as gemini_err:
+            import logging
+            logging.getLogger(__name__).warning("ArXiv Agent (expand_academic_queries): Gemini call failed. Activating Groq fallback.", exc_info=True)
+            from llm.groq_client import generate as groq_generate
+            response = groq_generate(prompt).strip()
+
         queries = [q.strip() for q in response.split("\n") if q.strip()]
         queries = [q for q in queries if len(q) < 100]
         if queries:
@@ -53,7 +60,14 @@ Do not output any explanation or extra text. Output ONLY the JSON block.
 """
     scores = {i: 0 for i in range(len(papers))}
     try:
-        response = gemini_generate(prompt).strip()
+        try:
+            response = gemini_generate(prompt).strip()
+        except Exception as gemini_err:
+            import logging
+            logging.getLogger(__name__).warning("ArXiv Agent (batch_score_papers): Gemini call failed. Activating Groq fallback.", exc_info=True)
+            from llm.groq_client import generate as groq_generate
+            response = groq_generate(prompt).strip()
+
         start = response.find("[")
         end = response.rfind("]")
         if start != -1 and end != -1 and end > start:
@@ -101,11 +115,23 @@ def search_arxiv(
         print(f"arXiv query failed for '{query}': {e}")
             
     if not all_papers:
+        print("arXiv results count: 0")
+        print("Ranked papers count: 0")
+        print("Final selected papers count: 0")
         return []
 
     # Score and filter
-    scores = batch_score_papers(query, all_papers)
-    
+    try:
+        scores = batch_score_papers(query, all_papers)
+    except Exception as e:
+        print(f"Batch scoring papers failed: {e}")
+        scores = [5] * len(all_papers)
+
+    # If scoring failed completely (e.g. returned all zeros due to API error or parsing error), fail-open
+    if all(s == 0 for s in scores):
+        print("Warning: Paper scoring failed or returned all zeros. Failing open with default scores.")
+        scores = [5] * len(all_papers)
+        
     filtered_papers = []
     for idx, p in enumerate(all_papers):
         score = scores[idx] if idx < len(scores) else 0
@@ -113,5 +139,17 @@ def search_arxiv(
         if score >= 5:
             filtered_papers.append(p)
             
-    filtered_papers = sorted(filtered_papers, key=lambda x: x.get("relevance_score", 0), reverse=True)
-    return filtered_papers[:max_results]
+    # If filtering returned absolutely nothing, fallback to all raw papers (fail-open)
+    if not filtered_papers and all_papers:
+        print("Warning: All papers filtered out. Failing open to all raw papers.")
+        for p in all_papers:
+            p["relevance_score"] = 5
+        filtered_papers = all_papers
+
+    final_papers = sorted(filtered_papers, key=lambda x: x.get("relevance_score", 0), reverse=True)[:max_results]
+
+    print(f"arXiv results count: {len(all_papers)}")
+    print(f"Ranked papers count: {len(filtered_papers)}")
+    print(f"Final selected papers count: {len(final_papers)}")
+
+    return final_papers

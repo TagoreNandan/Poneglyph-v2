@@ -4,11 +4,49 @@ from llm.gemini_client import generate
 
 
 def review_report(
-    query,
-    report
-):
+    query: str,
+    report: str,
+    verified_claims: list = None
+) -> dict:
 
-    prompt = f"""
+    if verified_claims:
+        # Format verified claims
+        formatted_claims = ""
+        for idx, vc in enumerate(verified_claims, start=1):
+            claim = vc.get("claim", "")
+            status = vc.get("status", "UNVERIFIED")
+            evidence = ", ".join(vc.get("evidence", []))
+            formatted_claims += f"- [{status}] Claim: {claim}\n  Evidence: {evidence}\n\n"
+
+        prompt = f"""
+You are a senior research reviewer.
+
+Research Topic:
+{query}
+
+REPORT:
+{report}
+
+Verification Data (Status and Evidence for key claims in the report):
+{formatted_claims}
+
+Analyze the report, review the verification data, and return ONLY valid JSON.
+
+Your review task:
+1. Carefully review disputed and weak claims identified in the verification data.
+2. Highlight any unsupported assertions in the report.
+3. Recommend or perform edits in the report to address areas requiring stronger evidence or corrections based on the verification data.
+4. Output the final, corrected/improved report in the "improved_report" key.
+
+JSON format:
+{{
+    "improved_report": "..."
+}}
+
+Return JSON only.
+"""
+    else:
+        prompt = f"""
 You are a senior research reviewer.
 
 Research Topic:
@@ -41,7 +79,13 @@ Return JSON only.
         # )
         # output = response["message"]["content"]
         
-        output = generate(prompt)
+        try:
+            output = generate(prompt)
+        except Exception as gemini_err:
+            import logging
+            logging.getLogger(__name__).warning("Critic Agent: Gemini call failed. Activating Groq fallback.", exc_info=True)
+            from llm.groq_client import generate as groq_generate
+            output = groq_generate(prompt)
 
         print("\nCRITIC RAW OUTPUT:\n")
         print(output)

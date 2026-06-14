@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE = 'https://poneglyph-v2-production.up.railway.app/api';
+const baseUrl = import.meta.env.VITE_API_URL || 'https://poneglyph-v2-production.up.railway.app';
+const API_BASE = `${baseUrl}/api`;
 
 export const fetchHistory = async () => {
   const res = await axios.get(`${API_BASE}/history`);
@@ -26,8 +27,13 @@ export const sendChat = async (report, question, history) => {
   return res.data;
 };
 
-export const downloadPDF = async (report, insights, chatHistory) => {
-  const res = await axios.post(`${API_BASE}/pdf`, { report, insights, chat_history: chatHistory }, { responseType: 'blob' });
+export const downloadPDF = async (report, insights, chatHistory, showCitations = false) => {
+  const res = await axios.post(`${API_BASE}/pdf`, { 
+    report, 
+    insights, 
+    chat_history: chatHistory,
+    show_citations: showCitations
+  }, { responseType: 'blob' });
   const url = window.URL.createObjectURL(new Blob([res.data]));
   const link = document.createElement('a');
   link.href = url;

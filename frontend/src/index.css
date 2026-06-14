@@ -1767,3 +1767,109 @@ body {
 .route-badge.badge-rag {
   background: #D97706;
 }
+
+/* Citation Navigation Tooltip and Highlight styles */
+html, body, .right-evidence-rail, .main-content {
+  scroll-behavior: smooth;
+}
+
+.citation-badge-container {
+  position: relative;
+  display: inline-block;
+}
+
+.citation-tooltip {
+  visibility: hidden;
+  position: absolute;
+  bottom: 135%;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background-color: var(--surface-container-highest, #333333);
+  color: var(--on-surface, #ffffff);
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--outline, #555);
+  z-index: 1000;
+  width: 240px;
+  white-space: normal;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.citation-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: var(--surface-container-highest, #333) transparent transparent transparent;
+}
+
+.citation-badge-container:hover .citation-tooltip {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.tooltip-title {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--on-background, #ffffff);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tooltip-domain {
+  font-size: 9px;
+  color: var(--primary, #4F46E5);
+  word-break: break-all;
+  display: block;
+}
+
+/* Source card highlight */
+.rail-source-card.highlighted {
+  border-color: var(--primary);
+  background-color: var(--surface-container-highest);
+  box-shadow: 0 0 12px rgba(79, 70, 229, 0.3);
+  transform: scale(1.02);
+  transition: all 0.3s ease;
+}
+
+/* Premium table styling inside report body */
+.report-body-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 24px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--on-surface);
+}
+
+.report-body-content th {
+  background-color: var(--surface-container-high);
+  color: var(--on-surface);
+  font-weight: 700;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--outline);
+}
+
+.report-body-content td {
+  padding: 10px 12px;
+  border: 1px solid var(--outline);
+}
+
+.report-body-content tr:nth-child(even) {
+  background-color: var(--surface-container-low);
+}

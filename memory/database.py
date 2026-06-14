@@ -310,18 +310,24 @@ Nostalgia curation is not objective; it represents a selective flattening of his
     for r_data in reports_data:
         cursor.execute("SELECT id FROM research_history WHERE query = ?", (r_data["query"],))
         if not cursor.fetchone():
+            from agents.research_agent import classify_research_domain
+            domain = classify_research_domain(r_data["query"])
+            if r_data["insights"] is None:
+                r_data["insights"] = {}
+            r_data["insights"]["domain"] = domain
             cursor.execute(
                 """
                 INSERT INTO research_history
-                (query, route, report, sources, insights)
-                VALUES (?, ?, ?, ?, ?)
+                (query, route, report, sources, insights, domain)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     r_data["query"],
                     r_data["route"],
                     r_data["report"],
                     json.dumps(r_data["sources"]),
-                    json.dumps(r_data["insights"])
+                    json.dumps(r_data["insights"]),
+                    domain
                 )
             )
 
@@ -352,6 +358,10 @@ def init_db():
         cursor.execute("ALTER TABLE research_history ADD COLUMN sources TEXT")
     if "insights" not in columns:
         cursor.execute("ALTER TABLE research_history ADD COLUMN insights TEXT")
+    if "hero_image" not in columns:
+        cursor.execute("ALTER TABLE research_history ADD COLUMN hero_image TEXT")
+    if "domain" not in columns:
+        cursor.execute("ALTER TABLE research_history ADD COLUMN domain TEXT")
 
     prepopulate_featured_reports(conn)
 
@@ -363,7 +373,9 @@ def save_research(
     route,
     report,
     sources=None,
-    insights=None
+    insights=None,
+    hero_image=None,
+    domain=None
 ):
 
     conn = sqlite3.connect(
@@ -373,7 +385,32 @@ def save_research(
     cursor = conn.cursor()
 
     sources_json = json.dumps(sources or [])
-    insights_json = json.dumps(insights or {})
+    
+    if not domain:
+        if insights and isinstance(insights, dict) and "domain" in insights:
+            domain = insights["domain"]
+    if not domain:
+        from agents.research_agent import classify_research_domain
+        domain = classify_research_domain(query)
+
+    if insights and isinstance(insights, dict):
+        insights["domain"] = domain
+        insights_json = json.dumps(insights)
+    else:
+        insights_json = json.dumps({"domain": domain})
+
+    # Requirement 6: Verify image URLs are persisted before report save.
+    if not hero_image:
+        if insights and isinstance(insights, dict) and "hero_image" in insights:
+            hero_image = insights["hero_image"]
+    if not hero_image and report:
+        import re
+        img_urls = re.findall(r'!\[.*?\]\(((?:[^()]+|\([^()]*\))*)\)', report)
+        if img_urls:
+            hero_image = img_urls[0]
+
+    # Requirement 1: Log SAVED_HERO
+    print(f"SAVED_HERO: {hero_image}")
 
     cursor.execute(
         """
@@ -383,16 +420,20 @@ def save_research(
             route,
             report,
             sources,
-            insights
+            insights,
+            hero_image,
+            domain
         )
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             query,
             route,
             report,
             sources_json,
-            insights_json
+            insights_json,
+            hero_image,
+            domain
         )
     )
 
@@ -414,7 +455,8 @@ def get_history():
             id,
             query,
             route,
-            timestamp
+            timestamp,
+            domain
         FROM research_history
         WHERE report NOT LIKE '%temporarily unavailable%'
           AND report NOT LIKE '%no report was generated%'
@@ -447,7 +489,9 @@ def get_report_by_id(report_id):
             report,
             timestamp,
             sources,
-            insights
+            insights,
+            hero_image,
+            domain
         FROM research_history
         WHERE id = ?
         """,

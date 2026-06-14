@@ -15,7 +15,14 @@ def detect_ambiguity(query: str):
     }}
     """
     try:
-        output = generate(prompt)
+        try:
+            output = generate(prompt)
+        except Exception as gemini_err:
+            import logging
+            logging.getLogger(__name__).warning("Ambiguity Agent: Gemini call failed. Activating Groq fallback.", exc_info=True)
+            from llm.groq_client import generate as groq_generate
+            output = groq_generate(prompt)
+
         start = output.find('{')
         end = output.rfind('}')
         if start != -1 and end != -1 and end > start:
